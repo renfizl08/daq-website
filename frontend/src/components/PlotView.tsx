@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType, CSSProperties } from "react";
-import { MousePointer2 } from "lucide-react";
+import { MousePointer2, Table2 } from "lucide-react";
 import { Button } from "./ui";
 import type { PlotTrace } from "../types/chart";
 import {
@@ -81,6 +81,7 @@ export function PlotView({ data, theme, axisTitles }: Props) {
     useState<ComponentType<PlotComponentProps> | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [sharedHover, setSharedHover] = useState(true);
+  const [showStats, setShowStats] = useState(true);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const stopBand = useRef<(() => void) | null>(null);
   const [band, setBand] = useState<{
@@ -300,6 +301,23 @@ export function PlotView({ data, theme, axisTitles }: Props) {
         <Button
           type="button"
           size="sm"
+          variant={showStats ? "primary" : "secondary"}
+          className="gap-1.5 rounded-full px-3"
+          aria-pressed={showStats}
+          onClick={() => setShowStats((current) => !current)}
+        >
+          <Table2 size={14} className="shrink-0" aria-hidden="true" />
+          Stats
+          <span
+            aria-hidden="true"
+            className="min-w-7 rounded-full border border-current/20 px-1.5 py-1 text-center text-[10px] leading-none opacity-80"
+          >
+            {showStats ? "On" : "Off"}
+          </span>
+        </Button>
+        <Button
+          type="button"
+          size="sm"
           variant={sharedHover ? "primary" : "secondary"}
           className="gap-1.5 rounded-full px-3"
           aria-pressed={sharedHover}
@@ -339,7 +357,7 @@ export function PlotView({ data, theme, axisTitles }: Props) {
             style={band}
           />
         )}
-        {statistics.length > 0 && (
+        {showStats && statistics.length > 0 && (
           <div className="absolute left-16 top-12 z-10 max-h-44 max-w-[calc(100%-5.5rem)] overflow-auto rounded-md border border-border bg-panel/95 shadow-lg backdrop-blur-sm">
             <table
               className="min-w-max border-collapse text-[11px] tabular-nums text-text"
