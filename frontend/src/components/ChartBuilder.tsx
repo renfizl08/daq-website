@@ -31,6 +31,7 @@ type Props = {
       xTitle: string;
       yTitle: string;
       y2Title?: string;
+      separateAxes?: boolean;
       traceLabels: Record<string, string>;
       traceAxisByColumn: Record<string, "y" | "y2">;
     },
@@ -92,6 +93,7 @@ export function ChartBuilder({
   const [timeColumn, setTimeColumn] = useState(initialTimeFilter.timeColumn);
   const [startTime, setStartTime] = useState(initialTimeFilter.startTime);
   const [endTime, setEndTime] = useState(initialTimeFilter.endTime);
+  const [separateAxes, setSeparateAxes] = useState(false);
   const [isXDropdownOpen, setIsXDropdownOpen] = useState(false);
   const [isYDropdownOpen, setIsYDropdownOpen] = useState(false);
 
@@ -217,7 +219,7 @@ export function ChartBuilder({
     new Set(yColumns.map((column) => columnUnit(column) || "unitless")),
   );
   const hasMultipleUnits = selectedUnits.length > 1;
-  const hasTooManyUnits = selectedUnits.length > 2;
+  const hasTooManyUnits = selectedUnits.length > 2 && !separateAxes;
   const primaryUnit = selectedUnits[0];
   const secondaryUnit = selectedUnits[1];
   const primaryUnitLabel =
@@ -524,7 +526,18 @@ export function ChartBuilder({
           {selectedTimeColumn?.display_name || selectedTimeColumn?.name}.
         </Alert>
       )}
-      {hasMultipleUnits && !hasTooManyUnits && (
+      {yColumns.length >= 2 && (
+        <Label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={separateAxes}
+            onChange={(event) => setSeparateAxes(event.target.checked)}
+            className="h-4 w-4 accent-button"
+          />
+          Separate Y-axis per series (shared time axis)
+        </Label>
+      )}
+      {hasMultipleUnits && !hasTooManyUnits && !separateAxes && (
         <Alert tone="info" className="text-xs">
           Using dual Y-axes for {primaryUnitLabel} and {secondaryUnitLabel}.
         </Alert>
@@ -556,6 +569,7 @@ export function ChartBuilder({
               y2Title: secondaryUnit
                 ? axisTitleForUnit(secondaryUnit)
                 : undefined,
+              separateAxes: separateAxes && yColumns.length >= 2,
               traceLabels: Object.fromEntries(
                 yColumns.map((column) => [column, columnLabel(column)]),
               ),

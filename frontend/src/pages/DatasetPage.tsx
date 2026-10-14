@@ -89,6 +89,7 @@ type GraphState = {
     xTitle: string;
     yTitle: string;
     y2Title?: string;
+    separateAxes?: boolean;
     traceLabels: Record<string, string>;
     traceAxisByColumn: Record<string, "y" | "y2">;
   } | null;
@@ -591,6 +592,7 @@ type SortableGraphCardProps = {
       xTitle: string;
       yTitle: string;
       y2Title?: string;
+      separateAxes?: boolean;
       traceLabels: Record<string, string>;
       traceAxisByColumn: Record<string, "y" | "y2">;
     },
@@ -936,6 +938,7 @@ export function DatasetPage({ theme }: Props) {
       xTitle: string;
       yTitle: string;
       y2Title?: string;
+      separateAxes?: boolean;
       traceLabels: Record<string, string>;
       traceAxisByColumn: Record<string, "y" | "y2">;
     },
