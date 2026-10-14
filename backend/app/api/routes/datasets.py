@@ -87,10 +87,13 @@ def chart_data(slug: str, payload: ChartRequest) -> dict:
     computed_names = set()
     raw_refs: set[str] = set()
     for column in payload.computed_columns:
+        if column.name in computed_names:
+            raise bad_request(f"Duplicate computed column name: {column.name}")
         tree, refs = parse_expression(column.expression)
         computed.append((column.name, tree, refs))
         computed_names.add(column.name)
-        raw_refs.update(refs.values())
+        # Later series may reference earlier ones; those are not raw columns.
+        raw_refs.update(ref for ref in refs.values() if ref not in computed_names)
     requested_columns = _columns_for_chart(payload, filters, computed_names)
     if raw_refs:
         requested_columns = (requested_columns or set()) | raw_refs

@@ -31,11 +31,16 @@ def parse_expression(expression: str) -> tuple[ast.expr, dict[str, str]]:
 
     try:
         tree = ast.parse(_BACKTICKED.sub(placeholder, expression), mode="eval").body
-    except SyntaxError as exc:
+    except (SyntaxError, ValueError, RecursionError, MemoryError) as exc:
         raise bad_request(f"Invalid expression '{expression}'") from exc
+    called = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
     for node in ast.walk(tree):
         if isinstance(node, ast.Name) and node.id not in columns:
-            if node.id not in _FUNCTIONS:
+            if node.id not in called or node.id not in _FUNCTIONS:
                 columns[node.id] = node.id
     return tree, columns
 
@@ -78,6 +83,9 @@ def add_computed_columns(
             raise bad_request(f"Unknown dataset columns: {', '.join(missing)}")
         with np.errstate(divide="ignore", invalid="ignore"):
             result = _evaluate(tree, frame, columns)
-        values = np.broadcast_to(np.asarray(result, dtype=float), (len(frame),))
+        try:
+            values = np.broadcast_to(np.asarray(result, dtype=float), (len(frame),))
+        except (OverflowError, ValueError) as exc:
+            raise bad_request(f"Cannot evaluate expression for '{name}'") from exc
         frame[name] = np.where(np.isfinite(values), values, np.nan)
     return frame

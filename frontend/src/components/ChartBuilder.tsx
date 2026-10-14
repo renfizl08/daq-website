@@ -236,6 +236,9 @@ export function ChartBuilder({
         column === previousName ? item.name : column;
       setYColumns((current) => current.map(rename));
       setXColumn(rename);
+      setUnitSelections(({ [previousName]: unit, ...rest }) =>
+        unit ? { ...rest, [item.name]: unit } : rest,
+      );
     }
   }
 
@@ -243,6 +246,11 @@ export function ChartBuilder({
     setComputed((current) => current.filter((item) => item.name !== name));
     setYColumns((current) => current.filter((item) => item !== name));
     setXColumn((current) => (current === name ? "" : current));
+    setUnitSelections((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([column]) => column !== name),
+      ),
+    );
   }
 
   function toggleYColumn(columnName: string) {

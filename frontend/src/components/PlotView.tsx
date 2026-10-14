@@ -82,6 +82,7 @@ export function PlotView({ data, theme, axisTitles }: Props) {
   const [renderError, setRenderError] = useState<string | null>(null);
   const [sharedHover, setSharedHover] = useState(true);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const stopBand = useRef<(() => void) | null>(null);
   const [band, setBand] = useState<{
     left: number;
     width: number;
@@ -114,6 +115,8 @@ export function PlotView({ data, theme, axisTitles }: Props) {
     setVisibleRanges({});
   }, [data, axisTitles]);
 
+  useEffect(() => () => stopBand.current?.(), []);
+
   // Plotly's zoom box only covers the subplot being dragged; mirror the
   // x-span of the drag across the whole plot area so every graph shows it.
   function startBand(event: React.MouseEvent<HTMLDivElement>) {
@@ -127,6 +130,7 @@ export function PlotView({ data, theme, axisTitles }: Props) {
     const x0 = event.clientX - origin.left;
     const y0 = event.clientY - origin.top;
     if (x0 < l || x0 > l + w || y0 < t || y0 > t + h) return;
+    stopBand.current?.();
     const clamp = (x: number) => Math.min(l + w, Math.max(l, x));
     const move = (e: MouseEvent) => {
       const x1 = clamp(e.clientX - origin.left);
@@ -140,8 +144,10 @@ export function PlotView({ data, theme, axisTitles }: Props) {
     const end = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", end);
+      stopBand.current = null;
       setBand(null);
     };
+    stopBand.current = end;
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", end);
   }

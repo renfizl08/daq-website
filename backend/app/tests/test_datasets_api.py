@@ -368,6 +368,32 @@ def test_chart_data_computed_columns():
     assert response.json()["data"][0]["y"] == [0.2, None, 0.8]
 
 
+def test_chart_data_computed_columns_can_chain_and_reject_duplicates():
+    csv_path = settings.data_dir / "sample.csv"
+    csv_path.write_text("Time,Voltage\n0,10\n1,5\n", encoding="utf-8")
+    record = registry.register(csv_path.name, csv_path.stat().st_size)
+
+    def chart(computed):
+        return client.post(
+            f"/api/datasets/{record.slug}/chart-data",
+            json={
+                "chart_type": "line",
+                "x_column": "Time",
+                "y_columns": ["P2"],
+                "computed_columns": computed,
+            },
+        )
+
+    first = {"name": "P", "expression": "Voltage * 2"}
+    response = chart([first, {"name": "P2", "expression": "P + 1"}])
+    assert response.json()["data"][0]["y"] == [21.0, 11.0]
+    response = chart([first, {"name": "P", "expression": "Voltage"}])
+    assert response.status_code == 400
+    # A series cannot use one defined after it.
+    response = chart([{"name": "P2", "expression": "P + 1"}, first])
+    assert response.status_code == 400
+
+
 def test_chart_data_computed_columns_reject_unsafe_expressions():
     csv_path = settings.data_dir / "sample.csv"
     csv_path.write_text("Time,Voltage\n0,10\n", encoding="utf-8")
