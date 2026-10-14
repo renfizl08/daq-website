@@ -271,13 +271,18 @@ export function ChartBuilder({
     new Set(yColumns.map((column) => columnUnit(column) || "unitless")),
   );
   const hasMultipleUnits = selectedUnits.length > 1;
-  const hasTooManyUnits = selectedUnits.length > 2 && !separateAxes;
+  const needsSeparateAxes = selectedUnits.length > 2;
+  const hasTooManyUnits = needsSeparateAxes && !separateAxes;
   const primaryUnit = selectedUnits[0];
   const secondaryUnit = selectedUnits[1];
   const primaryUnitLabel =
     primaryUnit === "unitless" ? "Unitless" : primaryUnit;
   const secondaryUnitLabel =
     secondaryUnit === "unitless" ? "Unitless" : secondaryUnit;
+
+  useEffect(() => {
+    if (needsSeparateAxes) setSeparateAxes(true);
+  }, [needsSeparateAxes]);
 
   function axisTitleForUnit(unit: string | undefined) {
     if (!unit) return "Values";

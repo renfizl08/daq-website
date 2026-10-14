@@ -119,6 +119,30 @@ describe("ChartBuilder", () => {
     );
   });
 
+  it("turns on separate axes when more than two units are selected", async () => {
+    const user = userEvent.setup();
+    const cols: SchemaColumn[] = ["s", "mph", "psi"].map((unit, i) => ({
+      name: `C${i}`,
+      type: "numeric",
+      unit,
+      display_name: `C${i} (${unit})`,
+      sample_values: ["1"],
+    }));
+    render(<ChartBuilder columns={cols} onRun={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /select y series/i }));
+    for (const col of cols.slice(0, 2))
+      await user.click(
+        screen.getByRole("checkbox", { name: col.display_name }),
+      );
+    const toggle = screen.getByLabelText(/Separate Y-axis per series/);
+    expect(toggle).not.toBeChecked();
+    await user.click(
+      screen.getByRole("checkbox", { name: cols[2].display_name }),
+    );
+    expect(toggle).toBeChecked();
+  });
+
   it.each(["Time", "elapsed_s", "device_elapsed_s", "startup_ns"])(
     "filters %s when time is not the x axis",
     async (timeName) => {
@@ -261,7 +285,7 @@ describe("ChartBuilder", () => {
     expect(screen.getByLabelText("OtherSpeed display unit")).toHaveValue("m/s");
   });
 
-  it("keeps the two-axis limit and omits unknown and datetime conversion controls", async () => {
+  it("auto-enables separate axes, keeps the limit when off, and omits unknown and datetime conversion controls", async () => {
     const user = userEvent.setup();
     render(
       <ChartBuilder
@@ -290,6 +314,10 @@ describe("ChartBuilder", () => {
         onRun={vi.fn()}
       />,
     );
+    const toggle = screen.getByLabelText(/Separate Y-axis per series/);
+    expect(toggle).toBeChecked();
+    expect(screen.getByRole("button", { name: "Render" })).toBeEnabled();
+    await user.click(toggle);
     expect(screen.getByRole("button", { name: "Render" })).toBeDisabled();
     expect(
       screen.queryByLabelText("Unknown display unit"),
