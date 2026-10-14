@@ -94,7 +94,18 @@ export function CustomSeriesEditor({
     });
   }
 
+  function submitOnEnter(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter" && !error) {
+      event.preventDefault();
+      save();
+    }
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter" && !suggestions.length) {
+      submitOnEnter(event);
+      return;
+    }
     if (event.key === "Escape" && suggestions.length) {
       event.preventDefault();
       setDismissed(true);
@@ -160,6 +171,7 @@ export function CustomSeriesEditor({
               setDraft({ ...draft, name: event.target.value })
             }
             placeholder="Power"
+            onKeyDown={submitOnEnter}
             aria-label="Custom series name"
           />
         </Label>
@@ -172,6 +184,7 @@ export function CustomSeriesEditor({
               setDraft({ ...draft, unit: event.target.value })
             }
             placeholder="W"
+            onKeyDown={submitOnEnter}
             aria-label="Custom series unit"
           />
         </Label>
@@ -230,8 +243,13 @@ export function CustomSeriesEditor({
         </Label>
       </div>
       <div className="flex items-center justify-between gap-2">
-        <p className="min-w-0 text-xs text-muted">
-          Use + - * / abs() sqrt() on numeric columns, in their original units.
+        <p
+          className={`min-w-0 text-xs ${!error ? "font-medium text-[var(--warning,#d97706)]" : "text-muted"}`}
+          role={!error ? "status" : undefined}
+        >
+          {!error
+            ? `Not added yet: click ${editing ? "Save" : "Add"} (or press Enter) to use this series.`
+            : "Use + - * / abs() sqrt() on numeric columns, in their original units."}
         </p>
         <div className="flex shrink-0 gap-2">
           {editing && (

@@ -71,7 +71,9 @@ describe("ChartBuilder", () => {
       "Speed * Time",
     );
     await user.type(screen.getByLabelText("Custom series unit"), "mi");
+    expect(screen.getByRole("status")).toHaveTextContent("Not added yet");
     await user.click(add);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Render" }));
 
     expect(onRun).toHaveBeenCalledWith(
@@ -87,6 +89,19 @@ describe("ChartBuilder", () => {
         traceLabels: { Dist: "Dist (mi)" },
       }),
       {},
+    );
+  });
+
+  it("adds a custom series with Enter", async () => {
+    const user = userEvent.setup();
+    render(<ChartBuilder columns={columns} onRun={vi.fn()} />);
+    await user.type(screen.getByLabelText("Custom series name"), "Neg");
+    await user.type(
+      screen.getByLabelText("Custom series expression"),
+      "-1 * 0.5 * 2{Enter}",
+    );
+    expect(screen.getByTitle("Edit custom series")).toHaveTextContent(
+      "Neg = -1 * 0.5 * 2",
     );
   });
 
@@ -141,6 +156,33 @@ describe("ChartBuilder", () => {
       screen.getByRole("checkbox", { name: cols[2].display_name }),
     );
     expect(toggle).toBeChecked();
+  });
+
+  it("collapses without losing the selection", async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    render(<ChartBuilder columns={columns} onRun={onRun} />);
+
+    await user.click(screen.getByRole("button", { name: /select y series/i }));
+    await user.click(screen.getByRole("checkbox", { name: "Speed (mph)" }));
+    await user.keyboard("{Escape}");
+    await user.click(
+      screen.getByRole("button", { name: "Collapse chart builder" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Render" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("line · 1 series selected")).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Expand chart builder" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Render" }));
+    expect(onRun).toHaveBeenCalledWith(
+      expect.objectContaining({ y_columns: ["Speed"] }),
+      expect.anything(),
+      {},
+    );
   });
 
   it.each(["Time", "elapsed_s", "device_elapsed_s", "startup_ns"])(

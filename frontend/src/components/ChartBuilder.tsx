@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Play, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Play, X } from "lucide-react";
 import type { SchemaColumn } from "../types/dataset";
 import type {
   ChartConfig,
@@ -111,6 +111,7 @@ export function ChartBuilder({
   const [timeColumn, setTimeColumn] = useState(initialTimeFilter.timeColumn);
   const [startTime, setStartTime] = useState(initialTimeFilter.startTime);
   const [endTime, setEndTime] = useState(initialTimeFilter.endTime);
+  const [collapsed, setCollapsed] = useState(false);
   const [separateAxes, setSeparateAxes] = useState(false);
   const [isXDropdownOpen, setIsXDropdownOpen] = useState(false);
   const [isYDropdownOpen, setIsYDropdownOpen] = useState(false);
@@ -316,19 +317,37 @@ export function ChartBuilder({
   return (
     <Panel className="grid gap-3 bg-surface-soft p-3 shadow-none">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-muted">
-            Chart Builder
-          </h3>
-          <p className="text-xs text-subtle">
-            {numericColumns.length} numeric channels
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() => setCollapsed((current) => !current)}
+          aria-expanded={!collapsed}
+          aria-label={
+            collapsed ? "Expand chart builder" : "Collapse chart builder"
+          }
+          className="flex min-w-0 items-center gap-2 rounded-md text-left transition hover:text-text"
+        >
+          {collapsed ? (
+            <ChevronRight size={16} aria-hidden="true" className="shrink-0" />
+          ) : (
+            <ChevronDown size={16} aria-hidden="true" className="shrink-0" />
+          )}
+          <span>
+            <span className="block text-sm font-semibold uppercase tracking-[0.16em] text-muted">
+              Chart Builder
+            </span>
+            <span className="block text-xs text-subtle">
+              {collapsed
+                ? `${chartType} · ${yColumns.length} series selected`
+                : `${numericColumns.length} numeric channels`}
+            </span>
+          </span>
+        </button>
         <FieldSelect
           value={chartType}
           onChange={(e) =>
             setChartType(e.target.value as ChartRequest["chart_type"])
           }
+          hidden={collapsed}
           className="w-full sm:w-40"
           aria-label="Chart type"
         >
@@ -339,323 +358,329 @@ export function ChartBuilder({
           <option value="box">Box</option>
         </FieldSelect>
       </div>
-      {numericColumns.length === 0 && (
-        <Alert tone="warning" className="text-xs">
-          This dataset has no numeric columns to plot.
-        </Alert>
-      )}
-      <div className="grid gap-2 md:grid-cols-2">
-        <Label className="grid gap-1.5">
-          X Axis
-          <Popover open={isXDropdownOpen} onOpenChange={setIsXDropdownOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="flex h-9 w-full items-center justify-between rounded-md border border-input-border bg-input px-3 text-left text-sm font-normal text-text shadow-sm transition hover:border-button focus:outline-none focus:ring-2 focus:ring-ring/30"
-                aria-label={xDropdownLabel}
-              >
-                <span className="truncate normal-case tracking-normal">
-                  {xDropdownLabel}
-                </span>
-                <ChevronDown
-                  size={15}
-                  aria-hidden="true"
-                  className="shrink-0 text-muted"
-                />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent>
-              <Command label="X axis channels">
-                <CommandInput
-                  placeholder="Search X channels..."
-                  aria-label="Search X channels"
-                />
-                <CommandList>
-                  <CommandEmpty>No channels found.</CommandEmpty>
-                  <CommandItem
-                    value="Use row index"
-                    onSelect={() => {
-                      setXColumn("");
-                      setIsXDropdownOpen(false);
-                    }}
-                    className={!xColumn ? "font-medium" : "text-muted"}
-                  >
-                    Use row index
-                  </CommandItem>
-                  {columns.map((col) => (
+      <div hidden={collapsed} className={collapsed ? undefined : "grid gap-3"}>
+        {numericColumns.length === 0 && (
+          <Alert tone="warning" className="text-xs">
+            This dataset has no numeric columns to plot.
+          </Alert>
+        )}
+        <div className="grid gap-2 md:grid-cols-2">
+          <Label className="grid gap-1.5">
+            X Axis
+            <Popover open={isXDropdownOpen} onOpenChange={setIsXDropdownOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-9 w-full items-center justify-between rounded-md border border-input-border bg-input px-3 text-left text-sm font-normal text-text shadow-sm transition hover:border-button focus:outline-none focus:ring-2 focus:ring-ring/30"
+                  aria-label={xDropdownLabel}
+                >
+                  <span className="truncate normal-case tracking-normal">
+                    {xDropdownLabel}
+                  </span>
+                  <ChevronDown
+                    size={15}
+                    aria-hidden="true"
+                    className="shrink-0 text-muted"
+                  />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent>
+                <Command label="X axis channels">
+                  <CommandInput
+                    placeholder="Search X channels..."
+                    aria-label="Search X channels"
+                  />
+                  <CommandList>
+                    <CommandEmpty>No channels found.</CommandEmpty>
                     <CommandItem
-                      key={col.name}
-                      value={`${col.display_name || col.name} ${col.name}`}
+                      value="Use row index"
                       onSelect={() => {
-                        setXColumn(col.name);
+                        setXColumn("");
                         setIsXDropdownOpen(false);
                       }}
-                      className={
-                        xColumn === col.name ? "font-medium" : undefined
-                      }
+                      className={!xColumn ? "font-medium" : "text-muted"}
                     >
-                      {col.display_name || col.name}
+                      Use row index
                     </CommandItem>
+                    {columns.map((col) => (
+                      <CommandItem
+                        key={col.name}
+                        value={`${col.display_name || col.name} ${col.name}`}
+                        onSelect={() => {
+                          setXColumn(col.name);
+                          setIsXDropdownOpen(false);
+                        }}
+                        className={
+                          xColumn === col.name ? "font-medium" : undefined
+                        }
+                      >
+                        {col.display_name || col.name}
+                      </CommandItem>
+                    ))}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </Label>
+          <Label className="grid gap-1.5">
+            Y Series
+            <Popover open={isYDropdownOpen} onOpenChange={setIsYDropdownOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-9 w-full items-center justify-between rounded-md border border-input-border bg-input px-3 text-left text-sm font-normal text-text shadow-sm transition hover:border-button focus:outline-none focus:ring-2 focus:ring-ring/30"
+                  aria-label={yDropdownLabel}
+                >
+                  <span className="truncate normal-case tracking-normal">
+                    {yDropdownLabel}
+                  </span>
+                  <ChevronDown
+                    size={15}
+                    aria-hidden="true"
+                    className="shrink-0 text-muted"
+                  />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent>
+                <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+                  <p className="text-sm font-medium text-text">Y Axis Series</p>
+                  {yColumns.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setYColumns([])}
+                      className="rounded-md px-2 py-1 text-xs text-muted transition hover:bg-surface-soft hover:text-text"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+                <Command label="Y axis channels">
+                  <CommandInput
+                    placeholder="Search Y channels..."
+                    aria-label="Search Y channels"
+                  />
+                  <CommandList>
+                    <CommandEmpty>No numeric channels found.</CommandEmpty>
+                    {numericColumns.map((col) => (
+                      <CommandItem
+                        key={col.name}
+                        value={`${col.display_name || col.name} ${col.name}`}
+                        onSelect={() => toggleYColumn(col.name)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={yColumns.includes(col.name)}
+                          onChange={() => toggleYColumn(col.name)}
+                          onClick={(event) => event.stopPropagation()}
+                          className="mr-2 h-4 w-4 shrink-0 accent-button"
+                          aria-label={col.display_name || col.name}
+                        />
+                        <span className="truncate">
+                          {col.display_name || col.name}
+                        </span>
+                      </CommandItem>
+                    ))}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </Label>
+        </div>
+        {yColumns.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {yColumns.map((column) => (
+              <button
+                key={column}
+                type="button"
+                onClick={() => toggleYColumn(column)}
+                className="inline-flex items-center gap-1 rounded-md border border-input-border bg-input px-2 py-1 text-xs font-medium text-text shadow-sm transition hover:border-button hover:bg-surface"
+                title="Remove series"
+              >
+                {columnLabel(column)}
+                <X size={12} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="grid gap-2 md:grid-cols-2">
+          {yColumns.length > 1 && (
+            <p className="text-xs text-muted md:col-span-2">
+              Changing a Y-series unit also updates selected series with
+              compatible units.
+            </p>
+          )}
+          {Array.from(new Set([xColumn, ...yColumns])).map((name) => {
+            const column = columns.find((item) => item.name === name);
+            const source = sourceUnit(column);
+            const targets = compatibleUnits(source);
+            if (!source || !targets.length) return null;
+            return (
+              <Label key={name} className="grid gap-1">
+                {name} display unit (source: {column?.unit})
+                <FieldSelect
+                  aria-label={`${name} display unit`}
+                  value={
+                    Object.prototype.hasOwnProperty.call(displayUnits, name)
+                      ? displayUnits[name]
+                      : source
+                  }
+                  onChange={(event) =>
+                    changeDisplayUnit(name, event.target.value)
+                  }
+                >
+                  {targets.map((target) => (
+                    <option key={target} value={target}>
+                      {target}
+                      {target === source ? " (original)" : ""}
+                      {target === "hp" ? " (mechanical)" : ""}
+                      {target === "g" ? " (standard gravity)" : ""}
+                    </option>
                   ))}
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-        </Label>
-        <Label className="grid gap-1.5">
-          Y Series
-          <Popover open={isYDropdownOpen} onOpenChange={setIsYDropdownOpen}>
-            <PopoverTrigger asChild>
+                </FieldSelect>
+              </Label>
+            );
+          })}
+        </div>
+        <CustomSeriesEditor
+          columns={schemaColumns}
+          computed={computed}
+          onSave={saveComputed}
+          onRemove={removeComputed}
+        />
+        {timeColumns.length > 0 && (
+          <div className="grid gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
+                Time Window
+              </p>
+              <Badge tone="default">{timeColumns.length} time fields</Badge>
+            </div>
+            <div className="grid gap-1.5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+              <Label className="grid min-w-0 gap-1">
+                Time Filter
+                <FieldSelect
+                  value={timeColumn}
+                  onChange={(event) => setTimeColumn(event.target.value)}
+                  aria-label="Time filter column"
+                >
+                  {timeColumns.map((column) => (
+                    <option key={column.name} value={column.name}>
+                      {column.display_name || column.name}
+                    </option>
+                  ))}
+                </FieldSelect>
+              </Label>
+              <Label className="grid min-w-0 gap-1">
+                Start
+                {selectedTimeColumn?.unit
+                  ? ` (${selectedTimeColumn.unit})`
+                  : ""}
+                <FieldInput
+                  type={timeInputType}
+                  value={startTime}
+                  onChange={(event) => setStartTime(event.target.value)}
+                  aria-label="Time filter start"
+                  placeholder="Min"
+                  step="any"
+                  className="w-full min-w-0"
+                />
+              </Label>
+              <Label className="grid min-w-0 gap-1">
+                End
+                {selectedTimeColumn?.unit
+                  ? ` (${selectedTimeColumn.unit})`
+                  : ""}
+                <FieldInput
+                  type={timeInputType}
+                  value={endTime}
+                  onChange={(event) => setEndTime(event.target.value)}
+                  aria-label="Time filter end"
+                  placeholder="Max"
+                  step="any"
+                  className="w-full min-w-0"
+                />
+              </Label>
+            </div>
+            {(startTime || endTime) && (
               <button
                 type="button"
-                className="flex h-9 w-full items-center justify-between rounded-md border border-input-border bg-input px-3 text-left text-sm font-normal text-text shadow-sm transition hover:border-button focus:outline-none focus:ring-2 focus:ring-ring/30"
-                aria-label={yDropdownLabel}
+                onClick={() => {
+                  setStartTime("");
+                  setEndTime("");
+                }}
+                className="justify-self-start rounded-md px-2 py-1 text-xs text-muted transition hover:bg-surface-soft hover:text-text"
               >
-                <span className="truncate normal-case tracking-normal">
-                  {yDropdownLabel}
-                </span>
-                <ChevronDown
-                  size={15}
-                  aria-hidden="true"
-                  className="shrink-0 text-muted"
-                />
+                Clear time filter
               </button>
-            </PopoverTrigger>
-            <PopoverContent>
-              <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-                <p className="text-sm font-medium text-text">Y Axis Series</p>
-                {yColumns.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setYColumns([])}
-                    className="rounded-md px-2 py-1 text-xs text-muted transition hover:bg-surface-soft hover:text-text"
-                  >
-                    Clear all
-                  </button>
-                )}
-              </div>
-              <Command label="Y axis channels">
-                <CommandInput
-                  placeholder="Search Y channels..."
-                  aria-label="Search Y channels"
-                />
-                <CommandList>
-                  <CommandEmpty>No numeric channels found.</CommandEmpty>
-                  {numericColumns.map((col) => (
-                    <CommandItem
-                      key={col.name}
-                      value={`${col.display_name || col.name} ${col.name}`}
-                      onSelect={() => toggleYColumn(col.name)}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={yColumns.includes(col.name)}
-                        onChange={() => toggleYColumn(col.name)}
-                        onClick={(event) => event.stopPropagation()}
-                        className="mr-2 h-4 w-4 shrink-0 accent-button"
-                        aria-label={col.display_name || col.name}
-                      />
-                      <span className="truncate">
-                        {col.display_name || col.name}
-                      </span>
-                    </CommandItem>
-                  ))}
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-        </Label>
-      </div>
-      {yColumns.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {yColumns.map((column) => (
-            <button
-              key={column}
-              type="button"
-              onClick={() => toggleYColumn(column)}
-              className="inline-flex items-center gap-1 rounded-md border border-input-border bg-input px-2 py-1 text-xs font-medium text-text shadow-sm transition hover:border-button hover:bg-surface"
-              title="Remove series"
-            >
-              {columnLabel(column)}
-              <X size={12} aria-hidden="true" />
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="grid gap-2 md:grid-cols-2">
-        {yColumns.length > 1 && (
-          <p className="text-xs text-muted md:col-span-2">
-            Changing a Y-series unit also updates selected series with
-            compatible units.
-          </p>
+            )}
+          </div>
         )}
-        {Array.from(new Set([xColumn, ...yColumns])).map((name) => {
-          const column = columns.find((item) => item.name === name);
-          const source = sourceUnit(column);
-          const targets = compatibleUnits(source);
-          if (!source || !targets.length) return null;
-          return (
-            <Label key={name} className="grid gap-1">
-              {name} display unit (source: {column?.unit})
-              <FieldSelect
-                aria-label={`${name} display unit`}
-                value={
-                  Object.prototype.hasOwnProperty.call(displayUnits, name)
-                    ? displayUnits[name]
-                    : source
-                }
-                onChange={(event) =>
-                  changeDisplayUnit(name, event.target.value)
-                }
-              >
-                {targets.map((target) => (
-                  <option key={target} value={target}>
-                    {target}
-                    {target === source ? " (original)" : ""}
-                    {target === "hp" ? " (mechanical)" : ""}
-                    {target === "g" ? " (standard gravity)" : ""}
-                  </option>
-                ))}
-              </FieldSelect>
-            </Label>
-          );
-        })}
+        {hasInvalidTimeFilter && (
+          <Alert tone="warning" className="text-xs">
+            Time filter values must be numeric for{" "}
+            {selectedTimeColumn?.display_name || selectedTimeColumn?.name}.
+          </Alert>
+        )}
+        {yColumns.length >= 2 && (
+          <Label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={separateAxes}
+              onChange={(event) => setSeparateAxes(event.target.checked)}
+              className="h-4 w-4 accent-button"
+            />
+            Separate Y-axis per series (shared time axis)
+          </Label>
+        )}
+        {hasMultipleUnits && !hasTooManyUnits && !separateAxes && (
+          <Alert tone="info" className="text-xs">
+            Using dual Y-axes for {primaryUnitLabel} and {secondaryUnitLabel}.
+          </Alert>
+        )}
+        {hasTooManyUnits && (
+          <Alert tone="warning" className="text-xs">
+            More than two Y-axis units selected. Only two axes are supported per
+            graph.
+          </Alert>
+        )}
+        <Button
+          disabled={
+            yColumns.length === 0 || hasTooManyUnits || hasInvalidTimeFilter
+          }
+          onClick={() =>
+            onRun(
+              {
+                chart_type: chartType,
+                x_column: xColumn || undefined,
+                y_columns: yColumns,
+                filters,
+                ...(computed.length ? { computed_columns: computed } : {}),
+              },
+              {
+                xTitle: xColumn ? columnLabel(xColumn) : "Index",
+                yTitle:
+                  yColumns.length === 1
+                    ? columnLabel(yColumns[0])
+                    : axisTitleForUnit(primaryUnit),
+                y2Title: secondaryUnit
+                  ? axisTitleForUnit(secondaryUnit)
+                  : undefined,
+                separateAxes: separateAxes && yColumns.length >= 2,
+                traceLabels: Object.fromEntries(
+                  yColumns.map((column) => [column, columnLabel(column)]),
+                ),
+                traceAxisByColumn: traceAxisByColumn(),
+              },
+              displayUnits,
+            )
+          }
+          variant="primary"
+          className="justify-self-start"
+        >
+          <Play size={15} aria-hidden="true" />
+          Render
+        </Button>
       </div>
-      <CustomSeriesEditor
-        columns={schemaColumns}
-        computed={computed}
-        onSave={saveComputed}
-        onRemove={removeComputed}
-      />
-      {timeColumns.length > 0 && (
-        <div className="grid gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 shadow-sm">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">
-              Time Window
-            </p>
-            <Badge tone="default">{timeColumns.length} time fields</Badge>
-          </div>
-          <div className="grid gap-1.5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-            <Label className="grid min-w-0 gap-1">
-              Time Filter
-              <FieldSelect
-                value={timeColumn}
-                onChange={(event) => setTimeColumn(event.target.value)}
-                aria-label="Time filter column"
-              >
-                {timeColumns.map((column) => (
-                  <option key={column.name} value={column.name}>
-                    {column.display_name || column.name}
-                  </option>
-                ))}
-              </FieldSelect>
-            </Label>
-            <Label className="grid min-w-0 gap-1">
-              Start
-              {selectedTimeColumn?.unit ? ` (${selectedTimeColumn.unit})` : ""}
-              <FieldInput
-                type={timeInputType}
-                value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
-                aria-label="Time filter start"
-                placeholder="Min"
-                step="any"
-                className="w-full min-w-0"
-              />
-            </Label>
-            <Label className="grid min-w-0 gap-1">
-              End
-              {selectedTimeColumn?.unit ? ` (${selectedTimeColumn.unit})` : ""}
-              <FieldInput
-                type={timeInputType}
-                value={endTime}
-                onChange={(event) => setEndTime(event.target.value)}
-                aria-label="Time filter end"
-                placeholder="Max"
-                step="any"
-                className="w-full min-w-0"
-              />
-            </Label>
-          </div>
-          {(startTime || endTime) && (
-            <button
-              type="button"
-              onClick={() => {
-                setStartTime("");
-                setEndTime("");
-              }}
-              className="justify-self-start rounded-md px-2 py-1 text-xs text-muted transition hover:bg-surface-soft hover:text-text"
-            >
-              Clear time filter
-            </button>
-          )}
-        </div>
-      )}
-      {hasInvalidTimeFilter && (
-        <Alert tone="warning" className="text-xs">
-          Time filter values must be numeric for{" "}
-          {selectedTimeColumn?.display_name || selectedTimeColumn?.name}.
-        </Alert>
-      )}
-      {yColumns.length >= 2 && (
-        <Label className="flex items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={separateAxes}
-            onChange={(event) => setSeparateAxes(event.target.checked)}
-            className="h-4 w-4 accent-button"
-          />
-          Separate Y-axis per series (shared time axis)
-        </Label>
-      )}
-      {hasMultipleUnits && !hasTooManyUnits && !separateAxes && (
-        <Alert tone="info" className="text-xs">
-          Using dual Y-axes for {primaryUnitLabel} and {secondaryUnitLabel}.
-        </Alert>
-      )}
-      {hasTooManyUnits && (
-        <Alert tone="warning" className="text-xs">
-          More than two Y-axis units selected. Only two axes are supported per
-          graph.
-        </Alert>
-      )}
-      <Button
-        disabled={
-          yColumns.length === 0 || hasTooManyUnits || hasInvalidTimeFilter
-        }
-        onClick={() =>
-          onRun(
-            {
-              chart_type: chartType,
-              x_column: xColumn || undefined,
-              y_columns: yColumns,
-              filters,
-              ...(computed.length ? { computed_columns: computed } : {}),
-            },
-            {
-              xTitle: xColumn ? columnLabel(xColumn) : "Index",
-              yTitle:
-                yColumns.length === 1
-                  ? columnLabel(yColumns[0])
-                  : axisTitleForUnit(primaryUnit),
-              y2Title: secondaryUnit
-                ? axisTitleForUnit(secondaryUnit)
-                : undefined,
-              separateAxes: separateAxes && yColumns.length >= 2,
-              traceLabels: Object.fromEntries(
-                yColumns.map((column) => [column, columnLabel(column)]),
-              ),
-              traceAxisByColumn: traceAxisByColumn(),
-            },
-            displayUnits,
-          )
-        }
-        variant="primary"
-        className="justify-self-start"
-      >
-        <Play size={15} aria-hidden="true" />
-        Render
-      </Button>
     </Panel>
   );
 }
