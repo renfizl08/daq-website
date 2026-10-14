@@ -16,6 +16,7 @@ from app.services.csv_reader import (
     read_dataset_sample_with_units,
 )
 from app.services.dataset_registry import registry
+from app.services.expressions import add_computed_columns, parse_expression
 from app.services.schema_inference import infer_schema
 
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
@@ -82,10 +83,22 @@ def preview_dataset(slug: str, payload: PreviewRequest) -> dict:
 @router.post("/{slug}/chart-data")
 def chart_data(slug: str, payload: ChartRequest) -> dict:
     filters = [rule.model_dump() for rule in payload.filters]
-    requested_columns = _columns_for_chart(payload, filters)
+    computed = []
+    computed_names = set()
+    raw_refs: set[str] = set()
+    for column in payload.computed_columns:
+        tree, refs = parse_expression(column.expression)
+        computed.append((column.name, tree, refs))
+        computed_names.add(column.name)
+        raw_refs.update(refs.values())
+    requested_columns = _columns_for_chart(payload, filters, computed_names)
+    if raw_refs:
+        requested_columns = (requested_columns or set()) | raw_refs
     df = read_dataset(slug, requested_columns)
     _validate_requested_columns(df.columns, requested_columns)
-    filtered = apply_filters(df, filters)
+    if computed_names & set(df.columns):
+        raise bad_request("Computed column names must not match dataset columns")
+    filtered = apply_filters(add_computed_columns(df, computed), filters)
     return build_chart_payload(
         filtered,
         payload.chart_type,
@@ -135,7 +148,9 @@ def _download_filename(source_name: str, suffix: str) -> str:
     return f"{safe_stem}-{suffix}.csv"
 
 
-def _columns_for_chart(payload: ChartRequest, filters: list[dict]) -> set[str] | None:
+def _columns_for_chart(
+    payload: ChartRequest, filters: list[dict], computed_names: set[str]
+) -> set[str] | None:
     columns = set(payload.y_columns)
     if payload.x_column:
         columns.add(payload.x_column)
@@ -145,7 +160,7 @@ def _columns_for_chart(payload: ChartRequest, filters: list[dict]) -> set[str] |
         column = rule.get("column")
         if isinstance(column, str):
             columns.add(column)
-    return columns or None
+    return (columns - computed_names) or None
 
 
 def _validate_requested_columns(

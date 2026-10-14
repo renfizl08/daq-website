@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, Play, X } from "lucide-react";
 import type { SchemaColumn } from "../types/dataset";
-import type { ChartConfig, ChartRequest, FilterRule } from "../types/chart";
+import type {
+  ChartConfig,
+  ChartRequest,
+  ComputedColumn,
+  FilterRule,
+} from "../types/chart";
 import {
   Alert,
   Badge,
@@ -18,7 +23,13 @@ import {
   CommandItem,
   CommandList,
 } from "./ui/command";
-import { cleanDisplayUnits, compatibleUnits, sourceUnit } from "../lib/units";
+import {
+  cleanDisplayUnits,
+  compatibleUnits,
+  computedSchemaColumns,
+  sourceUnit,
+} from "../lib/units";
+import { CustomSeriesEditor } from "./CustomSeriesEditor";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 type Props = {
@@ -72,11 +83,18 @@ function timeFilterState(filters: FilterRule[] | undefined) {
 }
 
 export function ChartBuilder({
-  columns,
+  columns: schemaColumns,
   config = defaultConfig,
   onConfigChange,
   onRun,
 }: Props) {
+  const [computed, setComputed] = useState<ComputedColumn[]>(
+    config.computed_columns || [],
+  );
+  const columns = useMemo(
+    () => [...schemaColumns, ...computedSchemaColumns(computed)],
+    [schemaColumns, computed],
+  );
   const [chartType, setChartType] = useState<ChartRequest["chart_type"]>(
     config.chart_type,
   );
@@ -148,8 +166,17 @@ export function ChartBuilder({
       y_columns: yColumns,
       display_units: displayUnits,
       filters,
+      ...(computed.length ? { computed_columns: computed } : {}),
     });
-  }, [chartType, filters, onConfigChange, xColumn, yColumns, displayUnits]);
+  }, [
+    chartType,
+    computed,
+    filters,
+    onConfigChange,
+    xColumn,
+    yColumns,
+    displayUnits,
+  ]);
 
   useEffect(() => {
     const available = new Set(columns.map((column) => column.name));
@@ -191,6 +218,31 @@ export function ChartBuilder({
       column?.unit ||
       null
     );
+  }
+
+  function saveComputed(item: ComputedColumn, previousName?: string) {
+    if (!previousName) {
+      setComputed((current) => [...current, item]);
+      setYColumns((current) => [...current, item.name]);
+      return;
+    }
+    setComputed((current) =>
+      current.map((existing) =>
+        existing.name === previousName ? item : existing,
+      ),
+    );
+    if (item.name !== previousName) {
+      const rename = (column: string) =>
+        column === previousName ? item.name : column;
+      setYColumns((current) => current.map(rename));
+      setXColumn(rename);
+    }
+  }
+
+  function removeComputed(name: string) {
+    setComputed((current) => current.filter((item) => item.name !== name));
+    setYColumns((current) => current.filter((item) => item !== name));
+    setXColumn((current) => (current === name ? "" : current));
   }
 
   function toggleYColumn(columnName: string) {
@@ -456,6 +508,12 @@ export function ChartBuilder({
           );
         })}
       </div>
+      <CustomSeriesEditor
+        columns={schemaColumns}
+        computed={computed}
+        onSave={saveComputed}
+        onRemove={removeComputed}
+      />
       {timeColumns.length > 0 && (
         <div className="grid gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 shadow-sm">
           <div className="flex items-center justify-between gap-2">
@@ -559,6 +617,7 @@ export function ChartBuilder({
               x_column: xColumn || undefined,
               y_columns: yColumns,
               filters,
+              ...(computed.length ? { computed_columns: computed } : {}),
             },
             {
               xTitle: xColumn ? columnLabel(xColumn) : "Index",

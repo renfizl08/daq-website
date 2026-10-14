@@ -14,12 +14,19 @@ class FilterRule(BaseModel):
     value: Any
 
 
+class ComputedColumn(BaseModel):
+    name: str = Field(min_length=1)
+    expression: str = Field(min_length=1)
+    unit: str | None = None
+
+
 class ChartRequest(BaseModel):
     chart_type: ChartType
     x_column: str | None = None
     y_columns: list[str] = Field(default_factory=list, min_length=1)
     group_by: str | None = None
     filters: list[FilterRule] = Field(default_factory=list)
+    computed_columns: list[ComputedColumn] = Field(default_factory=list)
 
 
 class PreviewRequest(BaseModel):

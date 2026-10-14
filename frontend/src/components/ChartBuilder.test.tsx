@@ -58,6 +58,67 @@ describe("ChartBuilder", () => {
     );
   });
 
+  it("adds a custom series and sends it with the request", async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    render(<ChartBuilder columns={columns} onRun={onRun} />);
+
+    const add = screen.getByRole("button", { name: "Add" });
+    expect(add).toBeDisabled();
+    await user.type(screen.getByLabelText("Custom series name"), "Dist");
+    await user.type(
+      screen.getByLabelText("Custom series expression"),
+      "Speed * Time",
+    );
+    await user.type(screen.getByLabelText("Custom series unit"), "mi");
+    await user.click(add);
+    await user.click(screen.getByRole("button", { name: "Render" }));
+
+    expect(onRun).toHaveBeenCalledWith(
+      {
+        chart_type: "line",
+        y_columns: ["Dist"],
+        filters: [],
+        computed_columns: [
+          { name: "Dist", expression: "Speed * Time", unit: "mi" },
+        ],
+      },
+      expect.objectContaining({
+        traceLabels: { Dist: "Dist (mi)" },
+      }),
+      {},
+    );
+  });
+
+  it("autocompletes channel names and edits a custom series", async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    render(<ChartBuilder columns={columns} onRun={onRun} />);
+
+    const expression = screen.getByLabelText("Custom series expression");
+    await user.type(screen.getByLabelText("Custom series name"), "Dist");
+    await user.type(expression, "2 * Spe");
+    await user.click(screen.getByRole("option", { name: /Speed/ }));
+    expect(expression).toHaveValue("2 * Speed");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await user.click(screen.getByTitle("Edit custom series"));
+    expect(expression).toHaveValue("2 * Speed");
+    await user.clear(screen.getByLabelText("Custom series name"));
+    await user.type(screen.getByLabelText("Custom series name"), "Twice");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Render" }));
+
+    expect(onRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        y_columns: ["Twice"],
+        computed_columns: [{ name: "Twice", expression: "2 * Speed" }],
+      }),
+      expect.anything(),
+      {},
+    );
+  });
+
   it.each(["Time", "elapsed_s", "device_elapsed_s", "startup_ns"])(
     "filters %s when time is not the x axis",
     async (timeName) => {

@@ -73,7 +73,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../components/ui/dialog";
-import { cleanDisplayUnits, convertChartData } from "../lib/units";
+import {
+  cleanDisplayUnits,
+  computedSchemaColumns,
+  convertChartData,
+} from "../lib/units";
 import { cxClasses } from "../components/ui-utils";
 
 type Props = {
@@ -211,6 +215,16 @@ function restoreChartConfig(
     x_column:
       typeof config?.x_column === "string" ? config.x_column : undefined,
     display_units: cleanDisplayUnits(config?.display_units),
+    ...(Array.isArray(config?.computed_columns) &&
+    config.computed_columns.length
+      ? {
+          computed_columns: config.computed_columns.filter(
+            (item) =>
+              typeof item?.name === "string" &&
+              typeof item.expression === "string",
+          ),
+        }
+      : {}),
     y_columns: Array.isArray(config?.y_columns)
       ? config.y_columns.filter(
           (item): item is string => typeof item === "string",
@@ -237,6 +251,8 @@ function chartConfigsEqual(left: ChartConfig, right: ChartConfig): boolean {
     Object.entries(left.display_units || {}).every(
       ([column, unit]) => right.display_units?.[column] === unit,
     ) &&
+    JSON.stringify(left.computed_columns || []) ===
+      JSON.stringify(right.computed_columns || []) &&
     left.chart_type === right.chart_type &&
     left.x_column === right.x_column &&
     left.y_columns.length === right.y_columns.length &&
@@ -956,7 +972,7 @@ export function DatasetPage({ theme }: Props) {
       const plotData = convertChartData(
         result.data as PlotTrace[],
         payload,
-        columns,
+        [...columns, ...computedSchemaColumns(payload.computed_columns)],
         displayUnits,
       );
       setGraphs((prev) =>
