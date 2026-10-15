@@ -1,93 +1,12 @@
 import { useState } from "react";
 import { useDatasets } from "../hooks/useDatasets";
 import { Alert, FieldSelect, Label, Panel } from "../components/ui";
-import { ChartBuilder } from "../components/ChartBuilder";
-import { useDatasetSchema } from "@/hooks/useDatasetSchema";
-import { getChartData } from "../api/datasets";
-import type { ChartRequest, PlotTrace } from "../types/chart";
-import { convertChartData } from "../lib/units";
+import { RunControls, type GraphState } from "../components/RunControls";
 import { PlotView } from "../components/PlotView";
-
 type Props = {
   theme: "light" | "dark";
 };
-type GraphState = {
-  slug: string;
-  plotData: PlotTrace[];
-};
-type RunControlsProps = {
-  slug: string;
-  label: string;
-  onData: (plot: GraphState) => void;
-};
-function RunControls({ slug, label, onData }: RunControlsProps) {
-  const { columns, loading, error } = useDatasetSchema(slug);
-  const [isLoading, setIsLoading] = useState(false);
-  const [chartError, setChartError] = useState<string | null>(null);
 
-  async function runChart(
-    payload: ChartRequest,
-    titles: {
-      xTitle: string;
-      yTitle: string;
-      y2Title?: string;
-      traceLabels: Record<string, string>;
-      traceAxisByColumn: Record<string, "y" | "y2">;
-    },
-    displayUnits: Record<string, string>,
-  ) {
-    setIsLoading(true);
-    setChartError(null);
-
-    try {
-      const result = await getChartData(slug, payload);
-
-      const converted = convertChartData(
-        result.data as PlotTrace[],
-        payload,
-        columns,
-        displayUnits,
-      );
-
-      const plotData = converted.map((trace) => {
-        const name = String(trace.name ?? "");
-
-        return {
-          ...trace,
-          name: `${label} — ${titles.traceLabels[name] || name}`,
-        };
-      });
-
-      onData({ slug, plotData });
-    } catch (err: unknown) {
-      setChartError(
-        err instanceof Error ? err.message : "Failed to load chart data",
-      );
-
-      onData({ slug, plotData: [] });
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  return (
-    <section className="grid gap-3">
-      <h3 className="text-base font-semibold">{label}</h3>
-
-      {loading && <p className="text-sm text-muted">Loading channels...</p>}
-
-      {error && <Alert tone="danger">{error}</Alert>}
-
-      {!loading && !error && (
-        <ChartBuilder columns={columns} onRun={runChart} />
-      )}
-      {isLoading && <p className="text-sm text-muted">Rendering graph...</p>}
-      {chartError && (
-        <Alert tone="danger">Chart load failed: {chartError}</Alert>
-      )}
-    </section>
-  );
-}
 export function ComparePage({ theme }: Props) {
   const { datasets, loading, error } = useDatasets();
 
