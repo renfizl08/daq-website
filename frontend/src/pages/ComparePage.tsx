@@ -4,7 +4,7 @@ import { Alert, FieldSelect, Label, Panel } from "../components/ui";
 import { ChartBuilder } from "../components/ChartBuilder";
 import { useDatasetSchema } from "@/hooks/useDatasetSchema";
 import { getChartData } from "../api/datasets";
-import type { PlotTrace } from "../types/chart";
+import type { ChartRequest, PlotTrace } from "../types/chart";
 import { convertChartData } from "../lib/units";
 import { PlotView } from "../components/PlotView";
 
@@ -25,6 +25,51 @@ function RunControls({ slug, label, onData }: RunControlsProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
 
+  async function runChart(
+    payload: ChartRequest,
+    titles: {
+      xTitle: string;
+      yTitle: string;
+      y2Title?: string;
+      traceLabels: Record<string, string>;
+      traceAxisByColumn: Record<string, "y" | "y2">;
+    },
+    displayUnits: Record<string, string>,
+  ) {
+    setIsLoading(true);
+    setChartError(null);
+
+    try {
+      const result = await getChartData(slug, payload);
+
+      const converted = convertChartData(
+        result.data as PlotTrace[],
+        payload,
+        columns,
+        displayUnits,
+      );
+
+      const plotData = converted.map((trace) => {
+        const name = String(trace.name ?? "");
+
+        return {
+          ...trace,
+          name: `${label} — ${titles.traceLabels[name] || name}`,
+        };
+      });
+
+      onData({ slug, plotData });
+    } catch (err: unknown) {
+      setChartError(
+        err instanceof Error ? err.message : "Failed to load chart data",
+      );
+
+      onData({ slug, plotData: [] });
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   return (
     <section className="grid gap-3">
       <h3 className="text-base font-semibold">{label}</h3>
@@ -34,45 +79,7 @@ function RunControls({ slug, label, onData }: RunControlsProps) {
       {error && <Alert tone="danger">{error}</Alert>}
 
       {!loading && !error && (
-        <ChartBuilder
-          columns={columns}
-          onRun={async (payload, titles, displayUnits) => {
-            setIsLoading(true);
-            setChartError(null);
-
-            try {
-              const result = await getChartData(slug, payload);
-
-              const converted = convertChartData(
-                result.data as PlotTrace[],
-                payload,
-                columns,
-                displayUnits,
-              );
-
-              const plotData = converted.map((trace) => {
-                const name = String(trace.name ?? "");
-
-                return {
-                  ...trace,
-                  name: `${label} — ${titles.traceLabels[name] || name}`,
-                };
-              });
-
-              onData({ slug, plotData });
-            } catch (err: unknown) {
-              setChartError(
-                err instanceof Error
-                  ? err.message
-                  : "Failed to load chart data",
-              );
-
-              onData({ slug, plotData: [] });
-            } finally {
-              setIsLoading(false);
-            }
-          }}
-        />
+        <ChartBuilder columns={columns} onRun={runChart} />
       )}
       {isLoading && <p className="text-sm text-muted">Rendering graph...</p>}
       {chartError && (
@@ -124,9 +131,6 @@ export function ComparePage({ theme }: Props) {
             </FieldSelect>
           </Label>
         ))}
-
-        <p>Run A: {runA || "None selected"}</p>
-        <p>Run B: {runB || "None selected"}</p>
       </Panel>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -148,16 +152,6 @@ export function ComparePage({ theme }: Props) {
           />
         )}
       </div>
-
-      <p className="text-sm text-muted">
-        Run A loaded traces:{" "}
-        {graphA?.slug === runA ? graphA.plotData.length : 0}
-      </p>
-
-      <p className="text-sm text-muted">
-        Run B loaded traces:{" "}
-        {graphB?.slug === runB ? graphB.plotData.length : 0}
-      </p>
 
       <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-inner">
         <PlotView data={plotData} theme={theme} axisTitles={null} />
