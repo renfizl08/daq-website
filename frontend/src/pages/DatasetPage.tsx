@@ -78,6 +78,7 @@ import {
   computedSchemaColumns,
   convertChartData,
 } from "../lib/units";
+import { useGraphSync } from "../hooks/useGraphSync";
 import { cxClasses } from "../components/ui-utils";
 
 type Props = {
@@ -754,6 +755,14 @@ export function DatasetPage({ theme }: Props) {
     }
     return [emptyGraph(1)];
   });
+  const graphSyncStatus = useGraphSync(
+    slug,
+    graphs.map(graphForStorage),
+    metadataPassword,
+    (remote) => {
+      setGraphs(remote.map((item, index) => restoreGraph(item, index + 1)));
+    },
+  );
   const [activeGraphId, setActiveGraphId] = useState<number | null>(null);
   const [desktopLayout, setDesktopLayout] = useState<"one" | "two">(() => {
     const stored = localStorage.getItem("daq-graph-layout");
@@ -1073,6 +1082,29 @@ export function DatasetPage({ theme }: Props) {
             <Plus size={15} aria-hidden="true" />
             Add New Graph
           </Button>
+          <Badge
+            tone={
+              graphSyncStatus === "shared"
+                ? "success"
+                : graphSyncStatus === "error"
+                  ? "danger"
+                  : "warning"
+            }
+            title={
+              graphSyncStatus === "local"
+                ? "Enter the upload password in Testing Metadata to share these graphs."
+                : undefined
+            }
+          >
+            {
+              {
+                local: "Graphs: this browser only",
+                saving: "Graphs: saving…",
+                shared: "Graphs: shared",
+                error: "Graphs: save failed",
+              }[graphSyncStatus]
+            }
+          </Badge>
           <div className="hidden items-center gap-1 rounded-lg border border-input-border bg-input p-1 shadow-sm lg:flex">
             <Button
               type="button"

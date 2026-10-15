@@ -29,6 +29,9 @@ infra/.env
 # Logs
 *.log
 
+# Runtime app state (dataset registry, shared graphs)
+backend/storage/state/
+
 # Generated dataset caches
 *.parquet
 

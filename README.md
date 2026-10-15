@@ -6,7 +6,7 @@ Web app for selecting CSV files from `data/`, exploring columns, and plotting gr
 
 - Backend: FastAPI + pandas
 - Frontend: React + Vite + Plotly
-- Dataset identity: permanent slug per CSV in `backend/app/storage/datasets.json`
+- Dataset identity: permanent slug per CSV in `backend/storage/state/datasets.json` (untracked runtime state, seeded from the old `backend/storage/datasets.json` on first start)
 
 ## Features
 

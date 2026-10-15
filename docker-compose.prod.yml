@@ -7,6 +7,8 @@ services:
       - infra/.env
     environment:
       - CORS_ORIGINS=https://kebab.sevenlayer.org
+      - ENVIRONMENT=production
+      - TRUSTED_PROXY_HOPS=1
     volumes:
       - ./data:/app/data
       - ./backend/storage:/app/backend/storage

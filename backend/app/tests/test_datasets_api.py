@@ -402,3 +402,15 @@ def test_chart_data_computed_columns_reject_unsafe_expressions():
     for expression in ("__import__('os')", "Voltage.real", "Voltage ** 2", "Voltage +"):
         assert _computed_chart(record, expression).status_code == 400
     assert _computed_chart(record, "Voltage * 2", name="Voltage").status_code == 400
+
+
+def test_column_limited_chart_read_builds_parquet_sidecar():
+    csv_path = settings.data_dir / "sample.csv"
+    csv_path.write_text("Time,Speed,Other\n0,10,1\n1,20,2\n", encoding="utf-8")
+    record = registry.register(csv_path.name, csv_path.stat().st_size)
+    body = {"chart_type": "line", "x_column": "Time", "y_columns": ["Speed"]}
+
+    for _ in range(2):
+        response = client.post(f"/api/datasets/{record.slug}/chart-data", json=body)
+        assert response.json()["data"][0]["y"] == [10, 20]
+    assert (settings.data_dir / "sample.csv.parquet").exists()

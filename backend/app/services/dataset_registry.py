@@ -16,7 +16,9 @@ class DatasetRegistry:
         self._lock = threading.Lock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if not self.path.exists():
-            self.path.write_text("[]", encoding="utf-8")
+            legacy = settings.legacy_registry_path
+            seed = legacy.read_text(encoding="utf-8") if legacy.exists() else "[]"
+            self.path.write_text(seed, encoding="utf-8")
 
     def _read(self) -> list[DatasetRecord]:
         payload = json.loads(self.path.read_text(encoding="utf-8"))

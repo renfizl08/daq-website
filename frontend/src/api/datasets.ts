@@ -87,3 +87,32 @@ function filenameFromDisposition(disposition: string | null) {
   const match = disposition?.match(/filename="([^"]+)"/);
   return match?.[1];
 }
+
+export type SharedGraphs = {
+  graphs: Record<string, unknown>[] | null;
+  updated_at: string | null;
+};
+
+export function getSharedGraphs(slug: string) {
+  return apiFetch<SharedGraphs>(
+    `/api/datasets/${encodeURIComponent(slug)}/graphs`,
+  );
+}
+
+export function saveSharedGraphs(
+  slug: string,
+  graphs: unknown[],
+  password: string,
+) {
+  return apiFetch<SharedGraphs>(
+    `/api/datasets/${encodeURIComponent(slug)}/graphs`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${password}`,
+      },
+      body: JSON.stringify({ graphs }),
+    },
+  );
+}
