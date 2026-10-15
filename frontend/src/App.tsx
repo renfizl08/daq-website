@@ -137,7 +137,7 @@ export default function App() {
             path="/datasets/:slug"
             element={<DatasetPage theme={theme} />}
           />
-          <Route path="/compare" element={<ComparePage />} />
+          <Route path="/compare" element={<ComparePage theme={theme} />} />
         </Routes>
       </Suspense>
     </div>

@@ -6,7 +6,11 @@ import { useDatasetSchema } from "@/hooks/useDatasetSchema";
 import { getChartData } from "../api/datasets";
 import type { PlotTrace } from "../types/chart";
 import { convertChartData } from "../lib/units";
+import { PlotView } from "../components/PlotView";
 
+type Props = {
+  theme: "light" | "dark";
+};
 type GraphState = {
   slug: string;
   plotData: PlotTrace[];
@@ -77,7 +81,7 @@ function RunControls({ slug, label, onData }: RunControlsProps) {
     </section>
   );
 }
-export function ComparePage() {
+export function ComparePage({ theme }: Props) {
   const { datasets, loading, error } = useDatasets();
 
   const [runA, setRunA] = useState("");
@@ -89,7 +93,10 @@ export function ComparePage() {
     { label: "Run A", value: runA, update: setRunA },
     { label: "Run B", value: runB, update: setRunB },
   ];
-
+  const plotData = [
+    ...(graphA?.slug === runA ? graphA.plotData : []),
+    ...(graphB?.slug === runB ? graphB.plotData : []),
+  ];
   return (
     <main className="grid gap-4">
       <Panel className="grid gap-4 p-4">
@@ -151,6 +158,10 @@ export function ComparePage() {
         Run B loaded traces:{" "}
         {graphB?.slug === runB ? graphB.plotData.length : 0}
       </p>
+
+      <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-inner">
+        <PlotView data={plotData} theme={theme} axisTitles={null} />
+      </div>
     </main>
   );
 }
