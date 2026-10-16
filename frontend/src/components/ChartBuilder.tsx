@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, Play, X } from "lucide-react";
 import type { SchemaColumn } from "../types/dataset";
-import type { ChartConfig, ChartRequest, FilterRule } from "../types/chart";
+import type {
+  ChartConfig,
+  ChartRequest,
+  FilterRule,
+  AxisTitles,
+} from "../types/chart";
 import {
   Alert,
   Badge,
@@ -27,13 +32,7 @@ type Props = {
   onConfigChange?: (config: ChartConfig) => void;
   onRun: (
     payload: ChartRequest,
-    axisTitles: {
-      xTitle: string;
-      yTitle: string;
-      y2Title?: string;
-      traceLabels: Record<string, string>;
-      traceAxisByColumn: Record<string, "y" | "y2">;
-    },
+    axisTitles: AxisTitles,
     displayUnits: Record<string, string>,
   ) => void;
 };

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { getChartData } from "../api/datasets";
 import { useDatasetSchema } from "../hooks/useDatasetSchema";
-import { convertChartData } from "../lib/units";
-import type { ChartRequest, PlotTrace } from "../types/chart";
+import { convertChartData, sourceUnit } from "../lib/units";
+import type { ChartRequest, PlotTrace, AxisTitles } from "../types/chart";
 import { ChartBuilder } from "./ChartBuilder";
 import { Alert } from "./ui";
+import { toElapsedTime } from "@/lib/compare";
 
 export type GraphState = {
   slug: string;
@@ -24,13 +25,7 @@ export function RunControls({ slug, label, onData }: RunControlsProps) {
 
   async function runChart(
     payload: ChartRequest,
-    titles: {
-      xTitle: string;
-      yTitle: string;
-      y2Title?: string;
-      traceLabels: Record<string, string>;
-      traceAxisByColumn: Record<string, "y" | "y2">;
-    },
+    titles: AxisTitles,
     displayUnits: Record<string, string>,
   ) {
     setIsLoading(true);
@@ -46,7 +41,19 @@ export function RunControls({ slug, label, onData }: RunControlsProps) {
         displayUnits,
       );
 
-      const plotData = converted.map((trace) => {
+      const timeColumn = columns.find(
+        (column) => column.name === payload.x_column,
+      );
+
+      if (timeColumn?.type !== "numeric") {
+        throw new Error("Choose a numeric time column for the X axis.");
+      }
+
+      const timeUnit = displayUnits[timeColumn.name] || sourceUnit(timeColumn);
+
+      const elapsed = toElapsedTime(converted, timeUnit);
+
+      const plotData = elapsed.map((trace) => {
         const name = String(trace.name ?? "");
 
         return {

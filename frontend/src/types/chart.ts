@@ -20,3 +20,11 @@ export type ChartConfig = Pick<
 > & { display_units?: Record<string, string> };
 
 export type PlotTrace = Record<string, unknown>;
+
+export type AxisTitles = {
+  xTitle: string;
+  yTitle: string;
+  y2Title?: string;
+  traceLabels: Record<string, string>;
+  traceAxisByColumn: Record<string, "y" | "y2">;
+};
