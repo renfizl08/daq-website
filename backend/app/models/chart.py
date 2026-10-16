@@ -44,3 +44,4 @@ class PreviewRequest(BaseModel):
 class ExportRequest(BaseModel):
     filters: list[FilterRule] = Field(default_factory=list)
     columns: list[str] | None = Field(default=None, min_length=1)
+    computed_columns: list[ComputedColumn] = Field(default_factory=list)

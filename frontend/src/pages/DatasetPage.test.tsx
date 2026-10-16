@@ -139,6 +139,48 @@ describe("DatasetPage", () => {
     );
   });
 
+  it("exports a graph's columns, custom series and filters", async () => {
+    const graph = {
+      id: 1,
+      name: "Lap 3",
+      chartConfig: {
+        chart_type: "line",
+        x_column: "Time",
+        y_columns: ["Time"],
+        filters: [{ column: "Driver", op: "eq", value: "Ada" }],
+        computed_columns: [{ name: "Power", expression: "Time * 2" }],
+      },
+    };
+    vi.mocked(window.localStorage.getItem).mockImplementation((key) =>
+      key === "daq-graphs-sample" ? JSON.stringify([graph]) : null,
+    );
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/datasets/sample"]}>
+        <Routes>
+          <Route
+            path="/datasets/:slug"
+            element={<DatasetPage theme="light" />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Export Lap 3 as CSV" }),
+    );
+
+    expect(exportDataset).toHaveBeenCalledWith(
+      "sample",
+      graph.chartConfig.filters,
+      ["Time", "Power"],
+      graph.chartConfig.computed_columns,
+    );
+    await waitFor(() =>
+      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled(),
+    );
+  });
+
   it("closes the export modal with Escape", async () => {
     const user = userEvent.setup();
     render(

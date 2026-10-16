@@ -414,3 +414,21 @@ def test_column_limited_chart_read_builds_parquet_sidecar():
         response = client.post(f"/api/datasets/{record.slug}/chart-data", json=body)
         assert response.json()["data"][0]["y"] == [10, 20]
     assert (settings.data_dir / "sample.csv.parquet").exists()
+
+
+def test_filtered_download_includes_computed_columns():
+    csv_path = settings.data_dir / "sample.csv"
+    csv_path.write_text("Time,A,B\n0,1,2\n1,3,4\n2,5,6\n", encoding="utf-8")
+    record = registry.register(csv_path.name, csv_path.stat().st_size)
+
+    response = client.post(
+        f"/api/datasets/{record.slug}/download",
+        json={
+            "columns": ["Time", "Sum"],
+            "computed_columns": [{"name": "Sum", "expression": "A + B"}],
+            "filters": [{"column": "Sum", "op": "gte", "value": 7}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.text == "Time,Sum\n1,7.0\n2,11.0\n"

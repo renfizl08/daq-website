@@ -593,6 +593,7 @@ function ExportModal({ slug, columns }: ExportModalProps) {
 }
 
 type SortableGraphCardProps = {
+  slug: string;
   graph: GraphState;
   index: number;
   totalGraphs: number;
@@ -617,6 +618,7 @@ type SortableGraphCardProps = {
 };
 
 function SortableGraphCard({
+  slug,
   graph,
   index,
   totalGraphs,
@@ -646,6 +648,40 @@ function SortableGraphCard({
     (config: ChartConfig) => onConfigChange(graph.id, config),
     [graph.id, onConfigChange],
   );
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  // Full-resolution rows for this graph's columns, custom series and filters.
+  // ponytail: values stay in source units; display-unit conversion is plot-only.
+  async function handleExport() {
+    const {
+      x_column,
+      y_columns,
+      filters,
+      computed_columns = [],
+    } = graph.chartConfig;
+    const names = [
+      x_column,
+      ...y_columns,
+      ...computed_columns.map((c) => c.name),
+    ];
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const result = await exportDataset(
+        slug,
+        filters,
+        [...new Set(names.filter((c): c is string => !!c))],
+        computed_columns,
+      );
+      const stem = displayName.replace(/[^A-Za-z0-9._-]+/g, "-");
+      downloadBlob(result.blob, `${slug}-${stem}.csv`);
+    } catch (err: unknown) {
+      setExportError(err instanceof Error ? err.message : "Failed to export");
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   return (
     <article
@@ -683,19 +719,36 @@ function SortableGraphCard({
             {graph.plotData.length} traces
           </Badge>
         </div>
-        <Tooltip label={`Remove ${displayName}`}>
-          <Button
-            type="button"
-            onClick={() => onRemove(graph.id)}
-            disabled={totalGraphs === 1}
-            variant="ghost"
-            size="icon"
-            aria-label={`Remove ${displayName}`}
-          >
-            <Trash2 size={15} aria-hidden="true" />
-          </Button>
-        </Tooltip>
+        <div className="flex shrink-0 items-center">
+          <Tooltip label={`Export ${displayName} as CSV`}>
+            <Button
+              type="button"
+              onClick={handleExport}
+              disabled={isExporting || graph.chartConfig.y_columns.length === 0}
+              variant="ghost"
+              size="icon"
+              aria-label={`Export ${displayName} as CSV`}
+            >
+              <Download size={15} aria-hidden="true" />
+            </Button>
+          </Tooltip>
+          <Tooltip label={`Remove ${displayName}`}>
+            <Button
+              type="button"
+              onClick={() => onRemove(graph.id)}
+              disabled={totalGraphs === 1}
+              variant="ghost"
+              size="icon"
+              aria-label={`Remove ${displayName}`}
+            >
+              <Trash2 size={15} aria-hidden="true" />
+            </Button>
+          </Tooltip>
+        </div>
       </div>
+      {exportError && (
+        <Alert tone="danger">CSV export failed: {exportError}</Alert>
+      )}
       <ChartBuilder
         columns={columns}
         config={graph.chartConfig}
@@ -1226,6 +1279,7 @@ export function DatasetPage({ theme }: Props) {
               {graphs.map((graph, index) => (
                 <SortableGraphCard
                   key={graph.id}
+                  slug={slug}
                   graph={graph}
                   index={index}
                   totalGraphs={graphs.length}

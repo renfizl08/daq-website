@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends, Response
 from app.config import settings
 from app.core.auth import require_upload_password
 from app.core.errors import bad_request
-from app.models.chart import ChartRequest, ExportRequest, PreviewRequest
+from app.models.chart import (
+    ChartRequest,
+    ComputedColumn,
+    ExportRequest,
+    PreviewRequest,
+)
 from app.models.dataset import DatasetListItem, DatasetMetadata, DatasetRecord
 from app.services.chart_builder import build_chart_payload
 from app.services.csv_reader import (
@@ -83,25 +88,13 @@ def preview_dataset(slug: str, payload: PreviewRequest) -> dict:
 @router.post("/{slug}/chart-data")
 def chart_data(slug: str, payload: ChartRequest) -> dict:
     filters = [rule.model_dump() for rule in payload.filters]
-    computed = []
-    computed_names = set()
-    raw_refs: set[str] = set()
-    for column in payload.computed_columns:
-        if column.name in computed_names:
-            raise bad_request(f"Duplicate computed column name: {column.name}")
-        tree, refs = parse_expression(column.expression)
-        computed.append((column.name, tree, refs))
-        computed_names.add(column.name)
-        # Later series may reference earlier ones; those are not raw columns.
-        raw_refs.update(ref for ref in refs.values() if ref not in computed_names)
+    computed, computed_names, raw_refs = _parse_computed(payload.computed_columns)
     requested_columns = _columns_for_chart(payload, filters, computed_names)
     if raw_refs:
         requested_columns = (requested_columns or set()) | raw_refs
     df = read_dataset(slug, requested_columns)
     _validate_requested_columns(df.columns, requested_columns)
-    if computed_names & set(df.columns):
-        raise bad_request("Computed column names must not match dataset columns")
-    filtered = apply_filters(add_computed_columns(df, computed), filters)
+    filtered = apply_filters(_with_computed(df, computed, computed_names), filters)
     return build_chart_payload(
         filtered,
         payload.chart_type,
@@ -119,15 +112,43 @@ def download_dataset(slug: str) -> Response:
 @router.post("/{slug}/download")
 def download_filtered_dataset(slug: str, payload: ExportRequest) -> Response:
     return _download_dataset(
-        slug, [rule.model_dump() for rule in payload.filters], payload.columns
+        slug,
+        [rule.model_dump() for rule in payload.filters],
+        payload.columns,
+        payload.computed_columns,
     )
 
 
+def _parse_computed(columns: list[ComputedColumn]):
+    computed = []
+    computed_names: set[str] = set()
+    raw_refs: set[str] = set()
+    for column in columns:
+        if column.name in computed_names:
+            raise bad_request(f"Duplicate computed column name: {column.name}")
+        tree, refs = parse_expression(column.expression)
+        computed.append((column.name, tree, refs))
+        computed_names.add(column.name)
+        # Later series may reference earlier ones; those are not raw columns.
+        raw_refs.update(ref for ref in refs.values() if ref not in computed_names)
+    return computed, computed_names, raw_refs
+
+
+def _with_computed(df, computed, computed_names: set[str]):
+    if computed_names & set(df.columns):
+        raise bad_request("Computed column names must not match dataset columns")
+    return add_computed_columns(df, computed)
+
+
 def _download_dataset(
-    slug: str, filters: list[dict], columns: list[str] | None
+    slug: str,
+    filters: list[dict],
+    columns: list[str] | None,
+    computed_columns: list[ComputedColumn] | None = None,
 ) -> Response:
     record = registry.get(slug)
-    df = read_dataset(slug)
+    computed, computed_names, _ = _parse_computed(computed_columns or [])
+    df = _with_computed(read_dataset(slug), computed, computed_names)
     _validate_filter_columns(df.columns, filters)
     _validate_requested_columns(
         df.columns, set(columns) if columns is not None else None
