@@ -32,6 +32,7 @@ export type AxisTitles = {
   xTitle: string;
   yTitle: string;
   y2Title?: string;
+  separateAxes?: boolean;
   traceLabels: Record<string, string>;
   traceAxisByColumn: Record<string, "y" | "y2">;
 };
