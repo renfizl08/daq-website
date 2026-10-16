@@ -4,6 +4,8 @@ import { Pencil, X } from "lucide-react";
 import { Button, FieldInput, Label } from "./ui";
 import type { ComputedColumn } from "../types/chart";
 import type { SchemaColumn } from "../types/dataset";
+import { expressionRefs } from "../lib/expressions";
+import { computedSchemaColumns } from "../lib/units";
 
 type Props = {
   columns: SchemaColumn[];
@@ -41,6 +43,19 @@ export function CustomSeriesEditor({
   const expressionRef = useRef<HTMLInputElement>(null);
 
   const name = draft.name.trim();
+  // Series are evaluated in order, so one can only use the series above it.
+  const position = editing
+    ? computed.findIndex((item) => item.name === editing)
+    : computed.length;
+  const usable = computedSchemaColumns(computed.slice(0, position));
+  const notYetDefined = new Set([
+    name,
+    ...computed.slice(position).map((item) => item.name),
+  ]);
+  const badRef = [...expressionRefs(draft.expression)].find((ref) =>
+    notYetDefined.has(ref),
+  );
+  const renamedDependents = editing && name !== editing ? usedBy(editing) : [];
   const error = !draft.expression.trim()
     ? "Enter an expression."
     : !name
@@ -48,12 +63,28 @@ export function CustomSeriesEditor({
       : columns.some((column) => column.name === name) ||
           computed.some((item) => item.name === name && item.name !== editing)
         ? `"${name}" is already a column name.`
-        : null;
+        : badRef === name
+          ? "A series can't use itself."
+          : badRef
+            ? `"${badRef}" is defined below this series; only series above it can be used.`
+            : renamedDependents.length
+              ? `"${editing}" is used by ${renamedDependents.join(", ")}; update those first.`
+              : null;
+  const incomplete = !name || !draft.expression.trim();
+
+  function usedBy(target: string) {
+    return computed
+      .filter(
+        (item) =>
+          item.name !== target && expressionRefs(item.expression).has(target),
+      )
+      .map((item) => item.name);
+  }
 
   const token = tokenAt(draft.expression, cursor);
   const suggestions =
     token && !dismissed && (token.quoted || token.query)
-      ? columns
+      ? [...columns, ...usable]
           .filter(
             (column) =>
               column.type === "numeric" &&
@@ -244,12 +275,14 @@ export function CustomSeriesEditor({
       </div>
       <div className="flex items-center justify-between gap-2">
         <p
-          className={`min-w-0 text-xs ${!error ? "font-medium text-[var(--warning,#d97706)]" : "text-muted"}`}
-          role={!error ? "status" : undefined}
+          className={`min-w-0 text-xs ${!error ? "font-medium text-[var(--warning,#d97706)]" : incomplete ? "text-muted" : "font-medium text-[var(--danger)]"}`}
+          role={!error ? "status" : incomplete ? undefined : "alert"}
         >
           {!error
             ? `Not added yet: click ${editing ? "Save" : "Add"} (or press Enter) to use this series.`
-            : "Use + - * / abs() sqrt() on numeric columns, in their original units."}
+            : incomplete
+              ? "Use + - * / abs() sqrt() on numeric columns and custom series above, in their original units."
+              : error}
         </p>
         <div className="flex shrink-0 gap-2">
           {editing && (
@@ -291,9 +324,14 @@ export function CustomSeriesEditor({
                   if (editing === item.name) reset();
                   onRemove(item.name);
                 }}
-                className="rounded-r-md px-1.5 py-1 transition hover:bg-surface"
+                disabled={usedBy(item.name).length > 0}
+                className="rounded-r-md px-1.5 py-1 transition hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
                 aria-label={`Remove ${item.name}`}
-                title="Remove custom series"
+                title={
+                  usedBy(item.name).length
+                    ? `Used by ${usedBy(item.name).join(", ")}; remove those first`
+                    : "Remove custom series"
+                }
               >
                 <X size={12} aria-hidden="true" />
               </button>

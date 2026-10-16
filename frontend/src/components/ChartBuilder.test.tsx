@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ChartBuilder } from "./ChartBuilder";
+import { expressionRefs } from "../lib/expressions";
 import type { SchemaColumn } from "../types/dataset";
 
 const columns: SchemaColumn[] = [
@@ -56,6 +57,59 @@ describe("ChartBuilder", () => {
       }),
       {},
     );
+  });
+
+  it("builds custom series from earlier ones and guards dependencies", async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    const a = { name: "A", expression: "Speed * 2" };
+    render(
+      <ChartBuilder
+        columns={columns}
+        config={{
+          chart_type: "line",
+          y_columns: ["A"],
+          filters: [],
+          computed_columns: [a],
+        }}
+        onRun={onRun}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("Custom series name"), "B");
+    await user.type(screen.getByLabelText("Custom series expression"), "A");
+    await user.click(
+      within(
+        screen.getByRole("listbox", { name: "Matching channels" }),
+      ).getByRole("option", { name: /^A/ }),
+    );
+    await user.type(screen.getByLabelText("Custom series expression"), " + 1");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(screen.getByRole("button", { name: "Remove A" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "A = Speed * 2" }));
+    await user.type(screen.getByLabelText("Custom series expression"), " + B");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      '"B" is defined below this series',
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Render" }));
+    expect(onRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        computed_columns: [a, { name: "B", expression: "A + 1" }],
+      }),
+      expect.anything(),
+      {},
+    );
+  });
+
+  it("finds the columns an expression uses", () => {
+    expect([...expressionRefs("`Pack Current` * V + abs(x) * 1e5")]).toEqual([
+      "Pack Current",
+      "V",
+      "x",
+    ]);
   });
 
   it("adds a custom series and sends it with the request", async () => {
