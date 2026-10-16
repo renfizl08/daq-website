@@ -103,6 +103,7 @@ export default function App() {
           </span>
         </Link>
         <div className="flex items-center gap-2">
+          <Link to="/compare" className = "text-sm font-medium hover:text-button"> Compare </Link>
           <Link
             to="/cascadia"
             className="text-sm font-medium hover:text-button"
