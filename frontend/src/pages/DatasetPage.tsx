@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -28,10 +28,11 @@ import {
   LockKeyhole,
   Plus,
   Rows2,
+  Share2,
   Trash2,
   X,
 } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ChartBuilder } from "../components/ChartBuilder";
 import { GpsMap } from "../components/GpsMap";
 import { PlotView } from "../components/PlotView";
@@ -186,7 +187,79 @@ function restoreGraph(
     ...emptyGraph(id),
     name: typeof item.name === "string" ? item.name : `Graph ${id}`,
     chartConfig: restoreChartConfig(item.chartConfig),
-    axisTitles: item.axisTitles || null,
+    axisTitles: restoreAxisTitles(item.axisTitles),
+  };
+}
+
+function isStringMap(value: unknown): value is Record<string, string> {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    Object.values(value).every((item) => typeof item === "string")
+  );
+}
+
+function restoreAxisTitles(value: unknown): GraphState["axisTitles"] {
+  const titles = value as Record<string, unknown> | null | undefined;
+  if (
+    !titles ||
+    typeof titles.xTitle !== "string" ||
+    typeof titles.yTitle !== "string" ||
+    !isStringMap(titles.traceLabels) ||
+    !isStringMap(titles.traceAxisByColumn)
+  ) {
+    return null;
+  }
+  return {
+    xTitle: titles.xTitle,
+    yTitle: titles.yTitle,
+    y2Title: typeof titles.y2Title === "string" ? titles.y2Title : undefined,
+    separateAxes: titles.separateAxes === true,
+    traceLabels: titles.traceLabels,
+    traceAxisByColumn: titles.traceAxisByColumn as Record<string, "y" | "y2">,
+  };
+}
+
+// Share links carry the graphs in the URL hash: no server state, no password.
+// ponytail: uncompressed base64 JSON, roughly 0.5-1 KB of URL per graph. If links
+// get too long for chat/email clients, deflate the JSON with the native
+// CompressionStream("deflate-raw") before base64 (likely several times shorter).
+// It is async, so encode/decode become async, which is fine since both already
+// run in an event handler and an effect. Use a new hash key (e.g. "#graphsz=")
+// and keep decoding "#graphs=" so links already shared keep working.
+function encodeShareHash(graphs: PersistedGraphState[]): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(graphs));
+  const base64 = btoa(
+    Array.from(bytes, (b) => String.fromCharCode(b)).join(""),
+  );
+  return `#graphs=${base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+}
+
+// Links are untrusted input, so every graph goes through restoreGraph.
+function decodeShareHash(hash: string): GraphState[] | null {
+  const value = new URLSearchParams(hash.slice(1)).get("graphs");
+  if (!value) return null;
+  try {
+    const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/"));
+    const parsed: unknown = JSON.parse(
+      new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0))),
+    );
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    return parsed.map((item, index) => restoreGraph(item, index + 1));
+  } catch {
+    return null;
+  }
+}
+
+function chartRequestFromConfig(config: ChartConfig): ChartRequest {
+  return {
+    chart_type: config.chart_type,
+    x_column: config.x_column,
+    y_columns: config.y_columns,
+    filters: config.filters,
+    ...(config.computed_columns?.length
+      ? { computed_columns: config.computed_columns }
+      : {}),
   };
 }
 
@@ -814,6 +887,70 @@ export function DatasetPage({ theme }: Props) {
   });
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isMetadataOpen, setIsMetadataOpen] = useState(true);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [graphsToRun, setGraphsToRun] = useState<GraphState[]>([]);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const shareHandled = useRef(false);
+
+  useEffect(() => {
+    if (shareHandled.current) return;
+    shareHandled.current = true;
+    const shared = decodeShareHash(location.hash);
+    if (!shared) return;
+    navigate(location.pathname + location.search, { replace: true });
+    const hasOwnGraphs = graphs.some(
+      (graph) => graph.chartConfig.y_columns.length > 0,
+    );
+    if (
+      hasOwnGraphs &&
+      !window.confirm(
+        "Replace your graphs for this dataset with the shared ones?",
+      )
+    ) {
+      return;
+    }
+    // Fresh ids remount the cards so their builders pick up the shared configs.
+    const offset = graphs.reduce((max, graph) => Math.max(max, graph.id), 0);
+    const next = shared.map((graph, index) => ({
+      ...graph,
+      id: offset + index + 1,
+    }));
+    setGraphs(next);
+    setGraphsToRun(next);
+    // Runs once on arrival; later hash changes are not share links.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (loading || error || graphsToRun.length === 0) return;
+    for (const graph of graphsToRun) {
+      if (graph.axisTitles && graph.chartConfig.y_columns.length > 0) {
+        void runChart(
+          graph.id,
+          chartRequestFromConfig(graph.chartConfig),
+          graph.axisTitles,
+          graph.chartConfig.display_units || {},
+        );
+      }
+    }
+    setGraphsToRun([]);
+    // runChart is recreated every render; graphsToRun gates this to once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphsToRun, loading, error]);
+
+  async function shareGraphs() {
+    const url =
+      window.location.href.split("#")[0] +
+      encodeShareHash(graphs.map(graphForStorage));
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      window.prompt("Copy this link to share your graphs:", url);
+    }
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -1122,6 +1259,10 @@ export function DatasetPage({ theme }: Props) {
               <ExportModal slug={slug} columns={columns} />
             )}
           </Dialog>
+          <Button type="button" onClick={shareGraphs} variant="secondary">
+            <Share2 size={15} aria-hidden="true" />
+            {shareCopied ? "Link Copied" : "Share Graphs"}
+          </Button>
           <Button type="button" onClick={addGraph} variant="primary">
             <Plus size={15} aria-hidden="true" />
             Add New Graph

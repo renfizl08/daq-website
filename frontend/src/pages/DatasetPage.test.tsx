@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   exportDataset,
+  getChartData,
   getDataset,
   updateDatasetMetadata,
 } from "../api/datasets";
@@ -179,6 +180,75 @@ describe("DatasetPage", () => {
     await waitFor(() =>
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled(),
     );
+  });
+
+  it("shares graphs through a link that restores and runs them", async () => {
+    const graph = {
+      id: 7,
+      name: "Shared lap",
+      chartConfig: {
+        chart_type: "line",
+        x_column: "Time",
+        y_columns: ["Power"],
+        filters: [{ column: "Time", op: "gte", value: 2 }],
+        computed_columns: [{ name: "Power", expression: "Time * 2" }],
+      },
+      axisTitles: {
+        xTitle: "Time (s)",
+        yTitle: "Power",
+        traceLabels: { Power: "Power" },
+        traceAxisByColumn: { Power: "y" },
+      },
+    };
+    vi.mocked(window.localStorage.getItem).mockImplementation((key) =>
+      key === "daq-graphs-sample" ? JSON.stringify([graph]) : null,
+    );
+    vi.mocked(getChartData).mockResolvedValue({ data: [], row_count: 0 });
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText");
+    const page = (entry: string) => (
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route
+            path="/datasets/:slug"
+            element={<DatasetPage theme="light" />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    const sharer = render(page("/datasets/sample"));
+    await user.click(screen.getByRole("button", { name: "Share Graphs" }));
+    const hash = "#" + writeText.mock.calls[0][0].split("#")[1];
+    sharer.unmount();
+
+    // The recipient has no graphs of their own.
+    vi.mocked(window.localStorage.getItem).mockReturnValue(null);
+    render(page(`/datasets/sample${hash}`));
+
+    expect(await screen.findByDisplayValue("Shared lap")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(getChartData).toHaveBeenCalledWith("sample", {
+        chart_type: "line",
+        x_column: "Time",
+        y_columns: ["Power"],
+        filters: graph.chartConfig.filters,
+        computed_columns: graph.chartConfig.computed_columns,
+      }),
+    );
+  });
+
+  it("ignores malformed share links", async () => {
+    render(
+      <MemoryRouter initialEntries={["/datasets/sample#graphs=%%%not-json"]}>
+        <Routes>
+          <Route
+            path="/datasets/:slug"
+            element={<DatasetPage theme="light" />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByDisplayValue("Graph 1")).toBeInTheDocument();
   });
 
   it("closes the export modal with Escape", async () => {
