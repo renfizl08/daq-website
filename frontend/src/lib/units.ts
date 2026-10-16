@@ -1,4 +1,4 @@
-import type { ChartRequest, PlotTrace } from "../types/chart";
+import type { ChartRequest, ComputedColumn, PlotTrace } from "../types/chart";
 import type { SchemaColumn } from "../types/dataset";
 
 type Unit = { family: string; scale: number; offset: number };
@@ -132,6 +132,19 @@ export function cleanDisplayUnits(
         : [];
     }),
   );
+}
+
+// Computed series behave like numeric schema columns with a user-declared unit.
+export function computedSchemaColumns(
+  computed: ComputedColumn[] = [],
+): SchemaColumn[] {
+  return computed.map(({ name, unit }) => ({
+    name,
+    type: "numeric",
+    unit: unit || null,
+    display_name: unit ? `${name} (${unit})` : name,
+    sample_values: [],
+  }));
 }
 
 export function convertChartData(

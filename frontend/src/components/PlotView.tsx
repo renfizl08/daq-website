@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType, CSSProperties } from "react";
-import { MousePointer2 } from "lucide-react";
+import { MousePointer2, Table2 } from "lucide-react";
 import { Button } from "./ui";
 import type { PlotTrace, AxisTitles } from "../types/chart";
 import {
@@ -54,6 +54,13 @@ type Props = {
   axisTitles: AxisTitles | null;
 };
 
+type PlotGraphDiv = HTMLElement & {
+  _fullLayout?: {
+    dragmode?: string;
+    _size: { l: number; t: number; w: number; h: number };
+  };
+};
+
 type PlotComponentProps = {
   data: PlotTrace[];
   layout: Record<string, unknown>;
@@ -67,6 +74,15 @@ export function PlotView({ data, theme, axisTitles }: Props) {
     useState<ComponentType<PlotComponentProps> | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [sharedHover, setSharedHover] = useState(true);
+  const [showStats, setShowStats] = useState(true);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const stopBand = useRef<(() => void) | null>(null);
+  const [band, setBand] = useState<{
+    left: number;
+    width: number;
+    top: number;
+    height: number;
+  } | null>(null);
   const [visibleRanges, setVisibleRanges] = useState<VisibleRanges>({});
 
   useEffect(() => {
@@ -92,6 +108,43 @@ export function PlotView({ data, theme, axisTitles }: Props) {
   useEffect(() => {
     setVisibleRanges({});
   }, [data, axisTitles]);
+
+  useEffect(() => () => stopBand.current?.(), []);
+
+  // Plotly's zoom box only covers the subplot being dragged; mirror the
+  // x-span of the drag across the whole plot area so every graph shows it.
+  function startBand(event: React.MouseEvent<HTMLDivElement>) {
+    const wrapper = wrapperRef.current;
+    const gd = wrapper?.querySelector<PlotGraphDiv>(".js-plotly-plot");
+    const layout = gd?._fullLayout;
+    if (!stacked || event.button !== 0 || !wrapper || !layout) return;
+    if (layout.dragmode !== "zoom") return;
+    const { l, t, w, h } = layout._size;
+    const origin = wrapper.getBoundingClientRect();
+    const x0 = event.clientX - origin.left;
+    const y0 = event.clientY - origin.top;
+    if (x0 < l || x0 > l + w || y0 < t || y0 > t + h) return;
+    stopBand.current?.();
+    const clamp = (x: number) => Math.min(l + w, Math.max(l, x));
+    const move = (e: MouseEvent) => {
+      const x1 = clamp(e.clientX - origin.left);
+      setBand({
+        left: Math.min(x0, x1),
+        width: Math.abs(x1 - x0),
+        top: t,
+        height: h,
+      });
+    };
+    const end = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", end);
+      stopBand.current = null;
+      setBand(null);
+    };
+    stopBand.current = end;
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", end);
+  }
 
   const colors = THEME_COLORS[theme];
   const colorway = COLORWAYS[theme];
@@ -119,17 +172,57 @@ export function PlotView({ data, theme, axisTitles }: Props) {
       return traceAxis ? { ...labeledTrace, yaxis: traceAxis } : labeledTrace;
     });
   }, [axisTitles, data]);
-  const hasRightAxis = Boolean(axisTitles?.y2Title);
+  const stacked = Boolean(axisTitles?.separateAxes);
+  const plotData = useMemo(
+    () =>
+      stacked
+        ? labeledData.map((trace, i) => ({
+            ...trace,
+            yaxis: i ? `y${i + 1}` : "y",
+          }))
+        : labeledData,
+    [labeledData, stacked],
+  );
+  const hasRightAxis = Boolean(axisTitles?.y2Title) && !stacked;
+  const height = stacked ? Math.max(520, 180 * plotData.length + 100) : 520;
+  // One y axis per trace, stacked top to bottom, all sharing the x axis.
+  const stackedAxes = useMemo(() => {
+    const n = plotData.length;
+    const gap = 0.03;
+    const h = (1 - gap * (n - 1)) / n;
+    return Object.fromEntries(
+      plotData.map((trace, i) => [
+        i ? `yaxis${i + 1}` : "yaxis",
+        {
+          title: { text: String(trace.name ?? ""), font: { size: 11 } },
+          domain: [1 - (i + 1) * h - i * gap, 1 - i * h - i * gap],
+          anchor: "x",
+          gridcolor: colors.grid,
+          zerolinecolor: colors.zero,
+        },
+      ]),
+    );
+  }, [colors.grid, colors.zero, plotData]);
   const layout = useMemo(
     () => ({
       autosize: true,
       hovermode: sharedHover ? "x unified" : "closest",
       hoverdistance: sharedHover ? -1 : 20,
+      hoversubplots: "axis",
       hoverlabel: { namelength: -1 },
       title: { text: "Dataset Graph", font: { size: 15 } },
       margin: { l: 64, r: hasRightAxis ? 64 : 24, t: 46, b: 56 },
       xaxis: {
         title: { text: axisTitles?.xTitle || "" },
+        ...(stacked
+          ? {
+              anchor: plotData.length > 1 ? `y${plotData.length}` : "y",
+              showspikes: true,
+              spikemode: "across",
+              spikesnap: "cursor",
+              spikethickness: 1,
+            }
+          : {}),
         gridcolor: colors.grid,
         zerolinecolor: colors.zero,
       },
@@ -138,6 +231,7 @@ export function PlotView({ data, theme, axisTitles }: Props) {
         gridcolor: colors.grid,
         zerolinecolor: colors.zero,
       },
+      ...(stacked ? stackedAxes : {}),
       ...(hasRightAxis
         ? {
             yaxis2: {
@@ -166,7 +260,10 @@ export function PlotView({ data, theme, axisTitles }: Props) {
       colors.text,
       colors.zero,
       hasRightAxis,
+      plotData.length,
       sharedHover,
+      stacked,
+      stackedAxes,
     ],
   );
   const statistics = useMemo(
@@ -193,7 +290,24 @@ export function PlotView({ data, theme, axisTitles }: Props) {
 
   return (
     <>
-      <div className="flex justify-end px-3 pb-1 pt-3">
+      <div className="flex justify-end gap-2 px-3 pb-1 pt-3">
+        <Button
+          type="button"
+          size="sm"
+          variant={showStats ? "primary" : "secondary"}
+          className="gap-1.5 rounded-full px-3"
+          aria-pressed={showStats}
+          onClick={() => setShowStats((current) => !current)}
+        >
+          <Table2 size={14} className="shrink-0" aria-hidden="true" />
+          Stats
+          <span
+            aria-hidden="true"
+            className="min-w-7 rounded-full border border-current/20 px-1.5 py-1 text-center text-[10px] leading-none opacity-80"
+          >
+            {showStats ? "On" : "Off"}
+          </span>
+        </Button>
         <Button
           type="button"
           size="sm"
@@ -212,11 +326,16 @@ export function PlotView({ data, theme, axisTitles }: Props) {
           </span>
         </Button>
       </div>
-      <div className="relative h-[520px] w-full">
+      <div
+        ref={wrapperRef}
+        className="relative w-full"
+        style={{ height }}
+        onMouseDownCapture={startBand}
+      >
         <PlotComponent
-          data={labeledData}
+          data={plotData}
           layout={layout}
-          style={{ width: "100%", height: "520px" }}
+          style={{ width: "100%", height }}
           onRelayout={(event) =>
             setVisibleRanges((current) => updateVisibleRanges(current, event))
           }
@@ -224,7 +343,14 @@ export function PlotView({ data, theme, axisTitles }: Props) {
             setRenderError(error.message || "Unknown Plotly error")
           }
         />
-        {statistics.length > 0 && (
+        {band && band.width > 2 && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-10 border-x border-button bg-button/15"
+            style={band}
+          />
+        )}
+        {showStats && statistics.length > 0 && (
           <div className="absolute left-16 top-12 z-10 max-h-44 max-w-[calc(100%-5.5rem)] overflow-auto rounded-md border border-border bg-panel/95 shadow-lg backdrop-blur-sm">
             <table
               className="min-w-max border-collapse text-[11px] tabular-nums text-text"

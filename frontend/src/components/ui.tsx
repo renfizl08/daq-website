@@ -102,12 +102,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   },
 );
 
-export function FieldInput({
-  className,
-  ...props
-}: InputHTMLAttributes<HTMLInputElement>) {
+export const FieldInput = forwardRef<
+  HTMLInputElement,
+  InputHTMLAttributes<HTMLInputElement>
+>(function FieldInput({ className, ...props }, ref) {
   return (
     <input
+      ref={ref}
       className={cn(
         "h-9 rounded-md border border-input-border bg-input px-3 text-sm text-text shadow-sm outline-none transition placeholder:text-subtle focus:border-button focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50",
         className,
@@ -115,7 +116,7 @@ export function FieldInput({
       {...props}
     />
   );
-}
+});
 
 export function FieldSelect({
   className,

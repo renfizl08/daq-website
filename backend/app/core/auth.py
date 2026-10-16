@@ -2,7 +2,7 @@ import secrets
 import time
 from collections import defaultdict, deque
 
-from fastapi import Header
+from fastapi import Header, Request
 
 from app.config import settings
 from app.core.errors import unauthorized
@@ -21,8 +21,20 @@ def _check_rate_limit(client_id: str) -> None:
         raise unauthorized("Too many authentication attempts")
 
 
-def require_upload_password(authorization: str | None = Header(default=None)) -> None:
-    client_id = "global"
+def _client_id(request: Request) -> str:
+    hops = settings.trusted_proxy_hops
+    forwarded = request.headers.get("x-forwarded-for", "")
+    addresses = [part.strip() for part in forwarded.split(",") if part.strip()]
+    # Count from the right: entries further left are client-controlled.
+    if hops > 0 and len(addresses) >= hops:
+        return addresses[-hops]
+    return request.client.host if request.client else "unknown"
+
+
+def require_upload_password(
+    request: Request, authorization: str | None = Header(default=None)
+) -> None:
+    client_id = _client_id(request)
     _check_rate_limit(client_id)
 
     token = ""

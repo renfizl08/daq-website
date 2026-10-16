@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ChartBuilder } from "./ChartBuilder";
+import { expressionRefs } from "../lib/expressions";
 import type { SchemaColumn } from "../types/dataset";
 
 const columns: SchemaColumn[] = [
@@ -54,6 +55,217 @@ describe("ChartBuilder", () => {
         xTitle: "Time (s)",
         yTitle: "Speed (mph)",
       }),
+      {},
+    );
+  });
+
+  it("builds custom series from earlier ones and guards dependencies", async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    const a = { name: "A", expression: "Speed * 2" };
+    render(
+      <ChartBuilder
+        columns={columns}
+        config={{
+          chart_type: "line",
+          y_columns: ["A"],
+          filters: [],
+          computed_columns: [a],
+        }}
+        onRun={onRun}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("Custom series name"), "B");
+    await user.type(screen.getByLabelText("Custom series expression"), "A");
+    await user.click(
+      within(
+        screen.getByRole("listbox", { name: "Matching channels" }),
+      ).getByRole("option", { name: /^A/ }),
+    );
+    await user.type(screen.getByLabelText("Custom series expression"), " + 1");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(screen.getByRole("button", { name: "Remove A" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "A = Speed * 2" }));
+    await user.type(screen.getByLabelText("Custom series expression"), " + B");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      '"B" is defined below this series',
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await user.click(screen.getByRole("button", { name: "Render" }));
+    expect(onRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        computed_columns: [a, { name: "B", expression: "A + 1" }],
+      }),
+      expect.anything(),
+      {},
+    );
+  });
+
+  it("finds the columns an expression uses", () => {
+    expect([...expressionRefs("`Pack Current` * V + abs(x) * 1e5")]).toEqual([
+      "Pack Current",
+      "V",
+      "x",
+    ]);
+  });
+
+  it("adds a custom series and sends it with the request", async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    render(<ChartBuilder columns={columns} onRun={onRun} />);
+
+    const add = screen.getByRole("button", { name: "Add" });
+    expect(add).toBeDisabled();
+    await user.type(screen.getByLabelText("Custom series name"), "Dist");
+    await user.type(
+      screen.getByLabelText("Custom series expression"),
+      "Speed * Time",
+    );
+    await user.type(screen.getByLabelText("Custom series unit"), "mi");
+    expect(screen.getByRole("status")).toHaveTextContent("Not added yet");
+    await user.click(add);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Render" }));
+
+    expect(onRun).toHaveBeenCalledWith(
+      {
+        chart_type: "line",
+        y_columns: ["Dist"],
+        filters: [],
+        computed_columns: [
+          { name: "Dist", expression: "Speed * Time", unit: "mi" },
+        ],
+      },
+      expect.objectContaining({
+        traceLabels: { Dist: "Dist (mi)" },
+      }),
+      {},
+    );
+  });
+
+  it("adds a custom series with Enter", async () => {
+    const user = userEvent.setup();
+    render(<ChartBuilder columns={columns} onRun={vi.fn()} />);
+    await user.type(screen.getByLabelText("Custom series name"), "Neg");
+    await user.type(
+      screen.getByLabelText("Custom series expression"),
+      "-1 * 0.5 * 2{Enter}",
+    );
+    expect(screen.getByTitle("Edit custom series")).toHaveTextContent(
+      "Neg = -1 * 0.5 * 2",
+    );
+  });
+
+  it("autocompletes channel names and edits a custom series", async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    render(<ChartBuilder columns={columns} onRun={onRun} />);
+
+    const expression = screen.getByLabelText("Custom series expression");
+    await user.type(screen.getByLabelText("Custom series name"), "Dist");
+    await user.type(expression, "2 * Spe");
+    await user.click(screen.getByRole("option", { name: /Speed/ }));
+    expect(expression).toHaveValue("2 * Speed");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+
+    await user.click(screen.getByTitle("Edit custom series"));
+    expect(expression).toHaveValue("2 * Speed");
+    await user.clear(screen.getByLabelText("Custom series name"));
+    await user.type(screen.getByLabelText("Custom series name"), "Twice");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Render" }));
+
+    expect(onRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        y_columns: ["Twice"],
+        computed_columns: [{ name: "Twice", expression: "2 * Speed" }],
+      }),
+      expect.anything(),
+      {},
+    );
+  });
+
+  it("turns on separate axes when more than two units are selected", async () => {
+    const user = userEvent.setup();
+    const cols: SchemaColumn[] = ["s", "mph", "psi"].map((unit, i) => ({
+      name: `C${i}`,
+      type: "numeric",
+      unit,
+      display_name: `C${i} (${unit})`,
+      sample_values: ["1"],
+    }));
+    render(<ChartBuilder columns={cols} onRun={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /select y series/i }));
+    for (const col of cols.slice(0, 2))
+      await user.click(
+        screen.getByRole("checkbox", { name: col.display_name }),
+      );
+    const toggle = screen.getByLabelText(/Separate Y-axis per series/);
+    expect(toggle).not.toBeChecked();
+    await user.click(
+      screen.getByRole("checkbox", { name: cols[2].display_name }),
+    );
+    expect(toggle).toBeChecked();
+  });
+
+  it("reorders separate-axis panels", async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    const cols: SchemaColumn[] = ["s", "mph", "psi"].map((unit, i) => ({
+      name: `C${i}`,
+      type: "numeric",
+      unit,
+      display_name: `C${i} (${unit})`,
+      sample_values: ["1"],
+    }));
+    render(<ChartBuilder columns={cols} onRun={onRun} />);
+
+    await user.click(screen.getByRole("button", { name: /select y series/i }));
+    for (const col of cols)
+      await user.click(
+        screen.getByRole("checkbox", { name: col.display_name }),
+      );
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Move C2 (psi) up" }));
+    expect(
+      screen.getByRole("button", { name: "Move C0 (s) up" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Render" }));
+
+    expect(onRun).toHaveBeenCalledWith(
+      expect.objectContaining({ y_columns: ["C0", "C2", "C1"] }),
+      expect.objectContaining({ separateAxes: true }),
+      {},
+    );
+  });
+
+  it("collapses without losing the selection", async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    render(<ChartBuilder columns={columns} onRun={onRun} />);
+
+    await user.click(screen.getByRole("button", { name: /select y series/i }));
+    await user.click(screen.getByRole("checkbox", { name: "Speed (mph)" }));
+    await user.keyboard("{Escape}");
+    await user.click(
+      screen.getByRole("button", { name: "Collapse chart builder" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Render" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("line · 1 series selected")).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Expand chart builder" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Render" }));
+    expect(onRun).toHaveBeenCalledWith(
+      expect.objectContaining({ y_columns: ["Speed"] }),
+      expect.anything(),
       {},
     );
   });
@@ -200,7 +412,7 @@ describe("ChartBuilder", () => {
     expect(screen.getByLabelText("OtherSpeed display unit")).toHaveValue("m/s");
   });
 
-  it("keeps the two-axis limit and omits unknown and datetime conversion controls", async () => {
+  it("auto-enables separate axes, keeps the limit when off, and omits unknown and datetime conversion controls", async () => {
     const user = userEvent.setup();
     render(
       <ChartBuilder
@@ -229,6 +441,10 @@ describe("ChartBuilder", () => {
         onRun={vi.fn()}
       />,
     );
+    const toggle = screen.getByLabelText(/Separate Y-axis per series/);
+    expect(toggle).toBeChecked();
+    expect(screen.getByRole("button", { name: "Render" })).toBeEnabled();
+    await user.click(toggle);
     expect(screen.getByRole("button", { name: "Render" })).toBeDisabled();
     expect(
       screen.queryByLabelText("Unknown display unit"),

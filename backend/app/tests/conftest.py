@@ -15,3 +15,4 @@ def isolated_dataset_storage(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "data_dir", data_dir)
     monkeypatch.setattr(settings, "registry_path", registry_path)
     monkeypatch.setattr(registry, "path", registry_path)
+    monkeypatch.setattr(settings, "legacy_registry_path", tmp_path / "none.json")

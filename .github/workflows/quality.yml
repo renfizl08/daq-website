@@ -36,3 +36,6 @@ jobs:
       - run: npm ci --prefix frontend
       - run: uv sync --locked --project backend --extra dev
       - run: npm run check
+      - run: npm --prefix frontend test
+      - run: uv run --locked python -m pytest
+        working-directory: backend

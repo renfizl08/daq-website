@@ -1,4 +1,6 @@
 import csv
+import logging
+import os
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -11,6 +13,8 @@ from pandas.errors import ParserError
 from app.config import settings
 from app.core.errors import bad_request
 from app.services.dataset_registry import registry
+
+logger = logging.getLogger(__name__)
 
 
 def dataset_path_for_slug(slug: str) -> Path:
@@ -71,6 +75,14 @@ def _read_dataset_cached(
     path = Path(path_value)
     columns = set(columns_key) if columns_key else None
     parquet_frame = _read_parquet_sidecar(path, columns)
+    if parquet_frame is None and columns:
+        # Parse the whole file once so later column-limited reads use parquet.
+        try:
+            ensure_parquet_sidecar(path)
+        except Exception as exc:
+            logger.warning("Unable to create parquet sidecar for %s: %s", path, exc)
+        else:
+            parquet_frame = _read_parquet_sidecar(path, columns)
     if parquet_frame is not None:
         return parquet_frame, _units_for_path(path, parquet_frame.columns.tolist())
 
@@ -281,9 +293,13 @@ def ensure_parquet_sidecar(path: Path, frame: pd.DataFrame | None = None) -> Non
 
 def _write_parquet_sidecar(path: Path, frame: pd.DataFrame) -> None:
     sidecar = _parquet_sidecar_path(path)
+    # Write to a temp file so concurrent workers never read a partial sidecar.
+    tmp = sidecar.with_name(f"{sidecar.name}.{os.getpid()}.tmp")
     try:
-        frame.to_parquet(sidecar, index=False)
+        frame.to_parquet(tmp, index=False)
+        os.replace(tmp, sidecar)
     except (ImportError, ValueError, OSError):
+        tmp.unlink(missing_ok=True)
         sidecar.unlink(missing_ok=True)
 
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -28,10 +28,11 @@ import {
   LockKeyhole,
   Plus,
   Rows2,
+  Share2,
   Trash2,
   X,
 } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ChartBuilder } from "../components/ChartBuilder";
 import { GpsMap } from "../components/GpsMap";
 import { PlotView } from "../components/PlotView";
@@ -74,7 +75,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../components/ui/dialog";
-import { cleanDisplayUnits, convertChartData } from "../lib/units";
+import {
+  cleanDisplayUnits,
+  computedSchemaColumns,
+  convertChartData,
+} from "../lib/units";
 import { cxClasses } from "../components/ui-utils";
 
 type Props = {
@@ -176,7 +181,79 @@ function restoreGraph(
     ...emptyGraph(id),
     name: typeof item.name === "string" ? item.name : `Graph ${id}`,
     chartConfig: restoreChartConfig(item.chartConfig),
-    axisTitles: item.axisTitles || null,
+    axisTitles: restoreAxisTitles(item.axisTitles),
+  };
+}
+
+function isStringMap(value: unknown): value is Record<string, string> {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    Object.values(value).every((item) => typeof item === "string")
+  );
+}
+
+function restoreAxisTitles(value: unknown): GraphState["axisTitles"] {
+  const titles = value as Record<string, unknown> | null | undefined;
+  if (
+    !titles ||
+    typeof titles.xTitle !== "string" ||
+    typeof titles.yTitle !== "string" ||
+    !isStringMap(titles.traceLabels) ||
+    !isStringMap(titles.traceAxisByColumn)
+  ) {
+    return null;
+  }
+  return {
+    xTitle: titles.xTitle,
+    yTitle: titles.yTitle,
+    y2Title: typeof titles.y2Title === "string" ? titles.y2Title : undefined,
+    separateAxes: titles.separateAxes === true,
+    traceLabels: titles.traceLabels,
+    traceAxisByColumn: titles.traceAxisByColumn as Record<string, "y" | "y2">,
+  };
+}
+
+// Share links carry the graphs in the URL hash: no server state, no password.
+// ponytail: uncompressed base64 JSON, roughly 0.5-1 KB of URL per graph. If links
+// get too long for chat/email clients, deflate the JSON with the native
+// CompressionStream("deflate-raw") before base64 (likely several times shorter).
+// It is async, so encode/decode become async, which is fine since both already
+// run in an event handler and an effect. Use a new hash key (e.g. "#graphsz=")
+// and keep decoding "#graphs=" so links already shared keep working.
+function encodeShareHash(graphs: PersistedGraphState[]): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(graphs));
+  const base64 = btoa(
+    Array.from(bytes, (b) => String.fromCharCode(b)).join(""),
+  );
+  return `#graphs=${base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+}
+
+// Links are untrusted input, so every graph goes through restoreGraph.
+function decodeShareHash(hash: string): GraphState[] | null {
+  const value = new URLSearchParams(hash.slice(1)).get("graphs");
+  if (!value) return null;
+  try {
+    const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/"));
+    const parsed: unknown = JSON.parse(
+      new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0))),
+    );
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    return parsed.map((item, index) => restoreGraph(item, index + 1));
+  } catch {
+    return null;
+  }
+}
+
+function chartRequestFromConfig(config: ChartConfig): ChartRequest {
+  return {
+    chart_type: config.chart_type,
+    x_column: config.x_column,
+    y_columns: config.y_columns,
+    filters: config.filters,
+    ...(config.computed_columns?.length
+      ? { computed_columns: config.computed_columns }
+      : {}),
   };
 }
 
@@ -205,6 +282,16 @@ function restoreChartConfig(
     x_column:
       typeof config?.x_column === "string" ? config.x_column : undefined,
     display_units: cleanDisplayUnits(config?.display_units),
+    ...(Array.isArray(config?.computed_columns) &&
+    config.computed_columns.length
+      ? {
+          computed_columns: config.computed_columns.filter(
+            (item) =>
+              typeof item?.name === "string" &&
+              typeof item.expression === "string",
+          ),
+        }
+      : {}),
     y_columns: Array.isArray(config?.y_columns)
       ? config.y_columns.filter(
           (item): item is string => typeof item === "string",
@@ -231,6 +318,8 @@ function chartConfigsEqual(left: ChartConfig, right: ChartConfig): boolean {
     Object.entries(left.display_units || {}).every(
       ([column, unit]) => right.display_units?.[column] === unit,
     ) &&
+    JSON.stringify(left.computed_columns || []) ===
+      JSON.stringify(right.computed_columns || []) &&
     left.chart_type === right.chart_type &&
     left.x_column === right.x_column &&
     left.y_columns.length === right.y_columns.length &&
@@ -571,6 +660,7 @@ function ExportModal({ slug, columns }: ExportModalProps) {
 }
 
 type SortableGraphCardProps = {
+  slug: string;
   graph: GraphState;
   index: number;
   totalGraphs: number;
@@ -588,6 +678,7 @@ type SortableGraphCardProps = {
 };
 
 function SortableGraphCard({
+  slug,
   graph,
   index,
   totalGraphs,
@@ -617,6 +708,40 @@ function SortableGraphCard({
     (config: ChartConfig) => onConfigChange(graph.id, config),
     [graph.id, onConfigChange],
   );
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  // Full-resolution rows for this graph's columns, custom series and filters.
+  // ponytail: values stay in source units; display-unit conversion is plot-only.
+  async function handleExport() {
+    const {
+      x_column,
+      y_columns,
+      filters,
+      computed_columns = [],
+    } = graph.chartConfig;
+    const names = [
+      x_column,
+      ...y_columns,
+      ...computed_columns.map((c) => c.name),
+    ];
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const result = await exportDataset(
+        slug,
+        filters,
+        [...new Set(names.filter((c): c is string => !!c))],
+        computed_columns,
+      );
+      const stem = displayName.replace(/[^A-Za-z0-9._-]+/g, "-");
+      downloadBlob(result.blob, `${slug}-${stem}.csv`);
+    } catch (err: unknown) {
+      setExportError(err instanceof Error ? err.message : "Failed to export");
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   return (
     <article
@@ -654,19 +779,36 @@ function SortableGraphCard({
             {graph.plotData.length} traces
           </Badge>
         </div>
-        <Tooltip label={`Remove ${displayName}`}>
-          <Button
-            type="button"
-            onClick={() => onRemove(graph.id)}
-            disabled={totalGraphs === 1}
-            variant="ghost"
-            size="icon"
-            aria-label={`Remove ${displayName}`}
-          >
-            <Trash2 size={15} aria-hidden="true" />
-          </Button>
-        </Tooltip>
+        <div className="flex shrink-0 items-center">
+          <Tooltip label={`Export ${displayName} as CSV`}>
+            <Button
+              type="button"
+              onClick={handleExport}
+              disabled={isExporting || graph.chartConfig.y_columns.length === 0}
+              variant="ghost"
+              size="icon"
+              aria-label={`Export ${displayName} as CSV`}
+            >
+              <Download size={15} aria-hidden="true" />
+            </Button>
+          </Tooltip>
+          <Tooltip label={`Remove ${displayName}`}>
+            <Button
+              type="button"
+              onClick={() => onRemove(graph.id)}
+              disabled={totalGraphs === 1}
+              variant="ghost"
+              size="icon"
+              aria-label={`Remove ${displayName}`}
+            >
+              <Trash2 size={15} aria-hidden="true" />
+            </Button>
+          </Tooltip>
+        </div>
       </div>
+      {exportError && (
+        <Alert tone="danger">CSV export failed: {exportError}</Alert>
+      )}
       <ChartBuilder
         columns={columns}
         config={graph.chartConfig}
@@ -732,6 +874,70 @@ export function DatasetPage({ theme }: Props) {
   });
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isMetadataOpen, setIsMetadataOpen] = useState(true);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [graphsToRun, setGraphsToRun] = useState<GraphState[]>([]);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const shareHandled = useRef(false);
+
+  useEffect(() => {
+    if (shareHandled.current) return;
+    shareHandled.current = true;
+    const shared = decodeShareHash(location.hash);
+    if (!shared) return;
+    navigate(location.pathname + location.search, { replace: true });
+    const hasOwnGraphs = graphs.some(
+      (graph) => graph.chartConfig.y_columns.length > 0,
+    );
+    if (
+      hasOwnGraphs &&
+      !window.confirm(
+        "Replace your graphs for this dataset with the shared ones?",
+      )
+    ) {
+      return;
+    }
+    // Fresh ids remount the cards so their builders pick up the shared configs.
+    const offset = graphs.reduce((max, graph) => Math.max(max, graph.id), 0);
+    const next = shared.map((graph, index) => ({
+      ...graph,
+      id: offset + index + 1,
+    }));
+    setGraphs(next);
+    setGraphsToRun(next);
+    // Runs once on arrival; later hash changes are not share links.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (loading || error || graphsToRun.length === 0) return;
+    for (const graph of graphsToRun) {
+      if (graph.axisTitles && graph.chartConfig.y_columns.length > 0) {
+        void runChart(
+          graph.id,
+          chartRequestFromConfig(graph.chartConfig),
+          graph.axisTitles,
+          graph.chartConfig.display_units || {},
+        );
+      }
+    }
+    setGraphsToRun([]);
+    // runChart is recreated every render; graphsToRun gates this to once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphsToRun, loading, error]);
+
+  async function shareGraphs() {
+    const url =
+      window.location.href.split("#")[0] +
+      encodeShareHash(graphs.map(graphForStorage));
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      window.prompt("Copy this link to share your graphs:", url);
+    }
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -936,7 +1142,7 @@ export function DatasetPage({ theme }: Props) {
       const plotData = convertChartData(
         result.data as PlotTrace[],
         payload,
-        columns,
+        [...columns, ...computedSchemaColumns(payload.computed_columns)],
         displayUnits,
       );
       setGraphs((prev) =>
@@ -1033,6 +1239,10 @@ export function DatasetPage({ theme }: Props) {
               <ExportModal slug={slug} columns={columns} />
             )}
           </Dialog>
+          <Button type="button" onClick={shareGraphs} variant="secondary">
+            <Share2 size={15} aria-hidden="true" />
+            {shareCopied ? "Link Copied" : "Share Graphs"}
+          </Button>
           <Button type="button" onClick={addGraph} variant="primary">
             <Plus size={15} aria-hidden="true" />
             Add New Graph
@@ -1190,6 +1400,7 @@ export function DatasetPage({ theme }: Props) {
               {graphs.map((graph, index) => (
                 <SortableGraphCard
                   key={graph.id}
+                  slug={slug}
                   graph={graph}
                   index={index}
                   totalGraphs={graphs.length}

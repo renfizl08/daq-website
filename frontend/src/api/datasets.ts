@@ -1,5 +1,5 @@
 import { apiFetch, errorMessageFromResponse } from "./client";
-import type { ChartRequest, FilterRule } from "../types/chart";
+import type { ChartRequest, ComputedColumn, FilterRule } from "../types/chart";
 import type { Dataset, DatasetMetadata, SchemaColumn } from "../types/dataset";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -66,11 +66,16 @@ export async function exportDataset(
   slug: string,
   filters: FilterRule[],
   columns: string[],
+  computedColumns: ComputedColumn[] = [],
 ) {
   const response = await fetch(datasetDownloadUrl(slug), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ filters, columns }),
+    body: JSON.stringify({
+      filters,
+      columns,
+      computed_columns: computedColumns,
+    }),
   });
   if (!response.ok) {
     throw new Error(errorMessageFromResponse(await response.text()));

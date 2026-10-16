@@ -212,4 +212,16 @@ describe("PlotView", () => {
       hoverdistance: -1,
     });
   });
+  it("hides the statistics box", async () => {
+    const user = userEvent.setup();
+    render(<PlotView data={[baseTrace]} theme="light" axisTitles={null} />);
+    await screen.findByTestId("plot");
+    const statistics = () =>
+      screen.queryByRole("table", { name: "Visible range statistics" });
+    expect(statistics()).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stats" }));
+    expect(statistics()).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stats" }));
+    expect(statistics()).toBeInTheDocument();
+  });
 });

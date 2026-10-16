@@ -338,3 +338,97 @@ def test_filtered_download_rejects_empty_selected_columns():
     )
 
     assert response.status_code == 422
+
+
+def _computed_chart(record, expression, name="Power"):
+    return client.post(
+        f"/api/datasets/{record.slug}/chart-data",
+        json={
+            "chart_type": "line",
+            "x_column": "Time",
+            "y_columns": [name],
+            "computed_columns": [{"name": name, "expression": expression}],
+        },
+    )
+
+
+def test_chart_data_computed_columns():
+    csv_path = settings.data_dir / "sample.csv"
+    csv_path.write_text(
+        "Time,Pack Current,Voltage\n0,2,10\n1,3,0\n2,4,5\n", encoding="utf-8"
+    )
+    record = registry.register(csv_path.name, csv_path.stat().st_size)
+
+    response = _computed_chart(record, "`Pack Current` * Voltage + 1")
+    assert response.status_code == 200
+    assert response.json()["data"][0]["y"] == [21.0, 1.0, 21.0]
+
+    # Division by zero becomes null rather than an error.
+    response = _computed_chart(record, "`Pack Current` / Voltage")
+    assert response.json()["data"][0]["y"] == [0.2, None, 0.8]
+
+
+def test_chart_data_computed_columns_can_chain_and_reject_duplicates():
+    csv_path = settings.data_dir / "sample.csv"
+    csv_path.write_text("Time,Voltage\n0,10\n1,5\n", encoding="utf-8")
+    record = registry.register(csv_path.name, csv_path.stat().st_size)
+
+    def chart(computed):
+        return client.post(
+            f"/api/datasets/{record.slug}/chart-data",
+            json={
+                "chart_type": "line",
+                "x_column": "Time",
+                "y_columns": ["P2"],
+                "computed_columns": computed,
+            },
+        )
+
+    first = {"name": "P", "expression": "Voltage * 2"}
+    response = chart([first, {"name": "P2", "expression": "P + 1"}])
+    assert response.json()["data"][0]["y"] == [21.0, 11.0]
+    response = chart([first, {"name": "P", "expression": "Voltage"}])
+    assert response.status_code == 400
+    # A series cannot use one defined after it.
+    response = chart([{"name": "P2", "expression": "P + 1"}, first])
+    assert response.status_code == 400
+
+
+def test_chart_data_computed_columns_reject_unsafe_expressions():
+    csv_path = settings.data_dir / "sample.csv"
+    csv_path.write_text("Time,Voltage\n0,10\n", encoding="utf-8")
+    record = registry.register(csv_path.name, csv_path.stat().st_size)
+
+    for expression in ("__import__('os')", "Voltage.real", "Voltage ** 2", "Voltage +"):
+        assert _computed_chart(record, expression).status_code == 400
+    assert _computed_chart(record, "Voltage * 2", name="Voltage").status_code == 400
+
+
+def test_column_limited_chart_read_builds_parquet_sidecar():
+    csv_path = settings.data_dir / "sample.csv"
+    csv_path.write_text("Time,Speed,Other\n0,10,1\n1,20,2\n", encoding="utf-8")
+    record = registry.register(csv_path.name, csv_path.stat().st_size)
+    body = {"chart_type": "line", "x_column": "Time", "y_columns": ["Speed"]}
+
+    for _ in range(2):
+        response = client.post(f"/api/datasets/{record.slug}/chart-data", json=body)
+        assert response.json()["data"][0]["y"] == [10, 20]
+    assert (settings.data_dir / "sample.csv.parquet").exists()
+
+
+def test_filtered_download_includes_computed_columns():
+    csv_path = settings.data_dir / "sample.csv"
+    csv_path.write_text("Time,A,B\n0,1,2\n1,3,4\n2,5,6\n", encoding="utf-8")
+    record = registry.register(csv_path.name, csv_path.stat().st_size)
+
+    response = client.post(
+        f"/api/datasets/{record.slug}/download",
+        json={
+            "columns": ["Time", "Sum"],
+            "computed_columns": [{"name": "Sum", "expression": "A + B"}],
+            "filters": [{"column": "Sum", "op": "gte", "value": 7}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.text == "Time,Sum\n1,7.0\n2,11.0\n"
