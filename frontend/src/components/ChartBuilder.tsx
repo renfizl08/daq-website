@@ -9,10 +9,11 @@ import {
 } from "lucide-react";
 import type { SchemaColumn } from "../types/dataset";
 import type {
+  AxisTitles,
   ChartConfig,
   ChartRequest,
+  ComputedColumn,
   FilterRule,
-  AxisTitles,
 } from "../types/chart";
 import {
   Alert,
