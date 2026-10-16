@@ -158,6 +158,37 @@ describe("ChartBuilder", () => {
     expect(toggle).toBeChecked();
   });
 
+  it("reorders separate-axis panels", async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    const cols: SchemaColumn[] = ["s", "mph", "psi"].map((unit, i) => ({
+      name: `C${i}`,
+      type: "numeric",
+      unit,
+      display_name: `C${i} (${unit})`,
+      sample_values: ["1"],
+    }));
+    render(<ChartBuilder columns={cols} onRun={onRun} />);
+
+    await user.click(screen.getByRole("button", { name: /select y series/i }));
+    for (const col of cols)
+      await user.click(
+        screen.getByRole("checkbox", { name: col.display_name }),
+      );
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Move C2 (psi) up" }));
+    expect(
+      screen.getByRole("button", { name: "Move C0 (s) up" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Render" }));
+
+    expect(onRun).toHaveBeenCalledWith(
+      expect.objectContaining({ y_columns: ["C0", "C2", "C1"] }),
+      expect.objectContaining({ separateAxes: true }),
+      {},
+    );
+  });
+
   it("collapses without losing the selection", async () => {
     const user = userEvent.setup();
     const onRun = vi.fn();

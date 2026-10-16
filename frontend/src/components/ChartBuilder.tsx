@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Play, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronRight,
+  Play,
+  X,
+} from "lucide-react";
 import type { SchemaColumn } from "../types/dataset";
 import type {
   ChartConfig,
@@ -252,6 +259,14 @@ export function ChartBuilder({
         Object.entries(current).filter(([column]) => column !== name),
       ),
     );
+  }
+
+  function moveYColumn(index: number, delta: -1 | 1) {
+    setYColumns((current) => {
+      const next = [...current];
+      [next[index], next[index + delta]] = [next[index + delta], next[index]];
+      return next;
+    });
   }
 
   function toggleYColumn(columnName: string) {
@@ -631,6 +646,49 @@ export function ChartBuilder({
             />
             Separate Y-axis per series (shared time axis)
           </Label>
+        )}
+        {separateAxes && yColumns.length >= 2 && (
+          <div className="grid gap-1 rounded-md border border-border bg-surface p-2">
+            <p id="panel-order-label" className="text-xs text-muted">
+              Panel order, top to bottom
+            </p>
+            <ol aria-labelledby="panel-order-label" className="grid gap-1">
+              {yColumns.map((column, index) => (
+                <li
+                  key={column}
+                  className="flex items-center justify-between gap-2 text-xs text-text"
+                >
+                  <span className="truncate">
+                    {index + 1}. {columnLabel(column)}
+                  </span>
+                  <span className="flex shrink-0">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      disabled={index === 0}
+                      onClick={() => moveYColumn(index, -1)}
+                      aria-label={`Move ${columnLabel(column)} up`}
+                    >
+                      <ArrowUp size={13} aria-hidden="true" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      disabled={index === yColumns.length - 1}
+                      onClick={() => moveYColumn(index, 1)}
+                      aria-label={`Move ${columnLabel(column)} down`}
+                    >
+                      <ArrowDown size={13} aria-hidden="true" />
+                    </Button>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
         )}
         {hasMultipleUnits && !hasTooManyUnits && !separateAxes && (
           <Alert tone="info" className="text-xs">
