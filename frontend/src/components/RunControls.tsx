@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { getChartData } from "../api/datasets";
 import { useDatasetSchema } from "../hooks/useDatasetSchema";
-import { convertChartData, sourceUnit } from "../lib/units";
+import {
+  computedSchemaColumns,
+  convertChartData,
+  sourceUnit,
+} from "../lib/units";
 import type { ChartRequest, PlotTrace, AxisTitles } from "../types/chart";
 import { ChartBuilder } from "./ChartBuilder";
 import { Alert } from "./ui";
@@ -34,14 +38,19 @@ export function RunControls({ slug, label, onData }: RunControlsProps) {
     try {
       const result = await getChartData(slug, payload);
 
+      const chartColumns = [
+        ...columns,
+        ...computedSchemaColumns(payload.computed_columns),
+      ];
+
       const converted = convertChartData(
         result.data as PlotTrace[],
         payload,
-        columns,
+        chartColumns,
         displayUnits,
       );
 
-      const timeColumn = columns.find(
+      const timeColumn = chartColumns.find(
         (column) => column.name === payload.x_column,
       );
 
