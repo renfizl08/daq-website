@@ -29,7 +29,7 @@ infra/.env
 # Logs
 *.log
 
-# Runtime app state (dataset registry, shared graphs)
+# Runtime app state (dataset registry)
 backend/storage/state/
 
 # Generated dataset caches

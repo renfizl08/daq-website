@@ -15,14 +15,11 @@ class Settings(BaseSettings):
     # Runtime state is untracked; the old tracked file only seeds a fresh state dir.
     registry_path: Path = _STORAGE / "state" / "datasets.json"
     legacy_registry_path: Path = _STORAGE / "datasets.json"
-    graphs_dir: Path = _STORAGE / "state" / "graphs"
     cors_origins: str = "*"
     max_upload_bytes: int = 1024 * 1024 * 1024
     upload_chunk_bytes: int = 1024 * 1024
     max_preview_rows: int = 200
     max_chart_rows: int = 20000
-    max_shared_graphs: int = 24
-    max_shared_graphs_bytes: int = 256 * 1024
     auth_rate_limit_window_seconds: int = 60
     auth_rate_limit_attempts: int = 8
     # Number of reverse proxies in front of the API that append to X-Forwarded-For.

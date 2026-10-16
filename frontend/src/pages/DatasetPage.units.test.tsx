@@ -21,10 +21,6 @@ vi.mock("react-plotly.js/factory", () => ({
 vi.mock("plotly.js-cartesian-dist-min", () => ({ default: {} }));
 vi.mock("../api/datasets", () => ({
   getChartData: vi.fn(),
-  getSharedGraphs: vi
-    .fn()
-    .mockResolvedValue({ graphs: null, updated_at: null }),
-  saveSharedGraphs: vi.fn(),
   getDataset: vi.fn(),
   updateDatasetMetadata: vi.fn(),
   exportDataset: vi.fn(),

@@ -16,10 +16,6 @@ vi.mock("../api/datasets", () => ({
   exportDataset: vi.fn(),
   getDataset: vi.fn(),
   getChartData: vi.fn(),
-  getSharedGraphs: vi
-    .fn()
-    .mockResolvedValue({ graphs: null, updated_at: null }),
-  saveSharedGraphs: vi.fn(),
   updateDatasetMetadata: vi.fn(),
 }));
 
