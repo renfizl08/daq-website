@@ -14,6 +14,7 @@ import { toElapsedTime } from "../lib/compare";
 export type RunPlot = {
   slug: string;
   plotData: PlotTrace[];
+  axisTitles: AxisTitles | null;
 };
 
 type RunControlsProps = {
@@ -64,20 +65,24 @@ export function RunControls({ slug, label, onData }: RunControlsProps) {
 
       const plotData = elapsed.map((trace) => {
         const name = String(trace.name ?? "");
+        const column = Object.keys(titles.traceAxisByColumn).find(
+          (column) => name === column || name.endsWith(` - ${column}`),
+        );
 
         return {
           ...trace,
+          yaxis: column ? titles.traceAxisByColumn[column] : "y",
           name: `${label} — ${titles.traceLabels[name] || name}`,
         };
       });
 
-      onData({ slug, plotData });
+      onData({ slug, plotData, axisTitles: titles });
     } catch (err: unknown) {
       setChartError(
         err instanceof Error ? err.message : "Failed to load chart data",
       );
 
-      onData({ slug, plotData: [] });
+      onData({ slug, plotData: [], axisTitles: null });
     } finally {
       setIsLoading(false);
     }

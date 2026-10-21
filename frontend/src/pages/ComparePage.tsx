@@ -23,6 +23,9 @@ export function ComparePage({ theme }: Props) {
     ...(graphA?.slug === runA ? graphA.plotData : []),
     ...(graphB?.slug === runB ? graphB.plotData : []),
   ];
+  const titles =
+    (graphA?.slug === runA ? graphA.axisTitles : null) ??
+    (graphB?.slug === runB ? graphB.axisTitles : null);
   return (
     <main className="grid gap-4">
       <Panel className="grid gap-4 p-4">
@@ -73,7 +76,20 @@ export function ComparePage({ theme }: Props) {
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-inner">
-        <PlotView data={plotData} theme={theme} axisTitles={null} />
+        <PlotView
+          data={plotData}
+          theme={theme}
+          axisTitles={
+            titles
+              ? {
+                  ...titles,
+                  xTitle: "Elapsed time (s)",
+                  traceLabels: {},
+                  traceAxisByColumn: {},
+                }
+              : null
+          }
+        />
       </div>
     </main>
   );
