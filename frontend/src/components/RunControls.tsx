@@ -9,9 +9,9 @@ import {
 import type { ChartRequest, PlotTrace, AxisTitles } from "../types/chart";
 import { ChartBuilder } from "./ChartBuilder";
 import { Alert } from "./ui";
-import { toElapsedTime } from "@/lib/compare";
+import { toElapsedTime } from "../lib/compare";
 
-export type GraphState = {
+export type RunPlot = {
   slug: string;
   plotData: PlotTrace[];
 };
@@ -19,7 +19,7 @@ export type GraphState = {
 type RunControlsProps = {
   slug: string;
   label: string;
-  onData: (plot: GraphState) => void;
+  onData: (plot: RunPlot) => void;
 };
 
 export function RunControls({ slug, label, onData }: RunControlsProps) {
