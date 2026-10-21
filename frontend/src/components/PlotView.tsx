@@ -160,6 +160,7 @@ export function PlotView({ data, theme, axisTitles }: Props) {
       const sourceColumn = directLabel ? name : groupedLabel?.[0];
       const labeledTrace = {
         ...trace,
+        hovertemplate: "%{y}<extra>%{fullData.name}</extra>",
         name:
           directLabel ||
           (groupedLabel
