@@ -12,13 +12,19 @@ export function toElapsedTime(
     throw new Error("Display time x column in seconds.");
   }
 
-  const timestamps = data[0]?.x;
+  let startTime: number | undefined;
 
-  if (!Array.isArray(timestamps)) {
-    throw new Error("No time data returned.");
+  for (const trace of data) {
+    if (!Array.isArray(trace.x)) {
+      throw new Error("A trace is missing its time data.");
+    }
+
+    for (const time of trace.x) {
+      if (isFinite(time) && (startTime === undefined || time < startTime)) {
+        startTime = time;
+      }
+    }
   }
-
-  const startTime = timestamps.find(isFinite);
 
   if (startTime === undefined) {
     throw new Error("No valid timestamps found.");
