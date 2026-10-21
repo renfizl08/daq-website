@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { getChartData } from "../api/datasets";
 import { useDatasetSchema } from "../hooks/useDatasetSchema";
 import {
@@ -27,17 +27,20 @@ export function RunControls({ slug, label, onData }: RunControlsProps) {
   const { columns, loading, error } = useDatasetSchema(slug);
   const [isLoading, setIsLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
+  const latestReq = useRef(0);
 
   async function runChart(
     payload: ChartRequest,
     titles: AxisTitles,
     displayUnits: Record<string, string>,
   ) {
+    const reqId = ++latestReq.current;
     setIsLoading(true);
     setChartError(null);
 
     try {
       const result = await getChartData(slug, payload);
+      if (reqId !== latestReq.current) return;
 
       const chartColumns = [
         ...columns,
@@ -82,13 +85,16 @@ export function RunControls({ slug, label, onData }: RunControlsProps) {
 
       onData({ slug, plotData, axisTitles: titles });
     } catch (err: unknown) {
+      if (reqId !== latestReq.current) return;
       setChartError(
         err instanceof Error ? err.message : "Failed to load chart data",
       );
 
       onData({ slug, plotData: [], axisTitles: null });
     } finally {
-      setIsLoading(false);
+      if (reqId === latestReq.current) {
+        setIsLoading(false);
+      }
     }
   }
 
