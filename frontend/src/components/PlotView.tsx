@@ -160,7 +160,9 @@ export function PlotView({ data, theme, axisTitles }: Props) {
       const sourceColumn = directLabel ? name : groupedLabel?.[0];
       const labeledTrace = {
         ...trace,
-        hovertemplate: "%{y}<extra>%{fullData.name}</extra>",
+        hovertemplate: sharedHover
+          ? "%{y}<extra>%{fullData.name}</extra>"
+          : "%{fullData.name}<br>X: %{x}<br>Y: %{y}<extra></extra>",
         name:
           directLabel ||
           (groupedLabel
@@ -172,7 +174,7 @@ export function PlotView({ data, theme, axisTitles }: Props) {
         : undefined;
       return traceAxis ? { ...labeledTrace, yaxis: traceAxis } : labeledTrace;
     });
-  }, [axisTitles, data]);
+  }, [axisTitles, data, sharedHover]);
   const stacked = Boolean(axisTitles?.separateAxes);
   const plotData = useMemo(
     () =>
