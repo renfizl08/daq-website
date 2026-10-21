@@ -68,6 +68,10 @@ export function RunControls({ slug, label, onData }: RunControlsProps) {
         const column = Object.keys(titles.traceAxisByColumn).find(
           (column) => name === column || name.endsWith(` - ${column}`),
         );
+        const traceLabel = column
+          ? name.slice(0, name.length - column.length) +
+            (titles.traceLabels[column] || column)
+          : name;
 
         return {
           ...trace,
