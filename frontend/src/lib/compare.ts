@@ -1,4 +1,5 @@
 import type { PlotTrace } from "../types/chart";
+import { compatibleUnits, convertUnit } from "./units";
 
 function isFinite(value: unknown): value is number {
   return typeof value == "number" && Number.isFinite(value);
@@ -8,8 +9,8 @@ export function toElapsedTime(
   data: PlotTrace[],
   timeUnit: string | undefined,
 ): PlotTrace[] {
-  if (timeUnit !== "s") {
-    throw new Error("Display time x column in seconds.");
+  if (!timeUnit || !compatibleUnits(timeUnit).includes("s")) {
+    throw new Error("Choose a time column with a known time unit.");
   }
 
   let startTime: number | undefined;
@@ -36,7 +37,7 @@ export function toElapsedTime(
     }
 
     const elapsedX = trace.x.map((time) =>
-      isFinite(time) ? time - startTime : null,
+      isFinite(time) ? convertUnit(time - startTime, timeUnit, "s") : null,
     );
 
     return { ...trace, x: elapsedX };
