@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { getChartData } from "../api/datasets";
 import { useDatasetSchema } from "../hooks/useDatasetSchema";
 import {
+  compatibleUnits,
   computedSchemaColumns,
   convertChartData,
   sourceUnit,
@@ -39,20 +40,10 @@ export function RunControls({ slug, label, onData }: RunControlsProps) {
     setChartError(null);
 
     try {
-      const result = await getChartData(slug, payload);
-      if (reqId !== latestReq.current) return;
-
       const chartColumns = [
         ...columns,
         ...computedSchemaColumns(payload.computed_columns),
       ];
-
-      const converted = convertChartData(
-        result.data as PlotTrace[],
-        payload,
-        chartColumns,
-        displayUnits,
-      );
 
       const timeColumn = chartColumns.find(
         (column) => column.name === payload.x_column,
@@ -63,6 +54,20 @@ export function RunControls({ slug, label, onData }: RunControlsProps) {
       }
 
       const timeUnit = displayUnits[timeColumn.name] || sourceUnit(timeColumn);
+
+      if (!timeUnit || !compatibleUnits(timeUnit).includes("s")) {
+        throw new Error("Choose a time column with a known time unit.");
+      }
+
+      const result = await getChartData(slug, payload);
+      if (reqId !== latestReq.current) return;
+
+      const converted = convertChartData(
+        result.data as PlotTrace[],
+        payload,
+        chartColumns,
+        displayUnits,
+      );
 
       const elapsed = toElapsedTime(converted, timeUnit);
 
