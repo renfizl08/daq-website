@@ -21,10 +21,18 @@ export type RunPlot = {
 type RunControlsProps = {
   slug: string;
   label: string;
+  renderRequest: number;
+  onRenderReady: (ready: boolean) => void;
   onData: (plot: RunPlot) => void;
 };
 
-export function RunControls({ slug, label, onData }: RunControlsProps) {
+export function RunControls({
+  slug,
+  label,
+  onData,
+  renderRequest,
+  onRenderReady,
+}: RunControlsProps) {
   const { columns, loading, error } = useDatasetSchema(slug);
   const [isLoading, setIsLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
@@ -112,7 +120,13 @@ export function RunControls({ slug, label, onData }: RunControlsProps) {
       {error && <Alert tone="danger">{error}</Alert>}
 
       {!loading && !error && (
-        <ChartBuilder columns={columns} onRun={runChart} />
+        <ChartBuilder
+          columns={columns}
+          onRun={runChart}
+          renderRequest={renderRequest}
+          onRenderReady={onRenderReady}
+          chartTypes={["line", "scatter"]}
+        />
       )}
       {isLoading && <p className="text-sm text-muted">Rendering graph...</p>}
       {chartError && (

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDatasets } from "../hooks/useDatasets";
-import { Alert, FieldSelect, Label, Panel } from "../components/ui";
+import { Play } from "lucide-react";
+import { Alert, Button, FieldSelect, Label, Panel } from "../components/ui";
 import { RunControls, type RunPlot } from "../components/RunControls";
 import { PlotView } from "../components/PlotView";
 type Props = {
@@ -10,6 +11,9 @@ type Props = {
 export function ComparePage({ theme }: Props) {
   const { datasets, loading, error } = useDatasets();
 
+  const [renderRequest, setRenderRequest] = useState(0);
+  const [readyA, setReadyA] = useState(false);
+  const [readyB, setReadyB] = useState(false);
   const [runA, setRunA] = useState("");
   const [runB, setRunB] = useState("");
   const [graphA, setGraphA] = useState<RunPlot | null>(null);
@@ -62,6 +66,8 @@ export function ComparePage({ theme }: Props) {
             slug={runA}
             label="Run A"
             onData={setGraphA}
+            renderRequest={renderRequest}
+            onRenderReady={setReadyA}
           />
         )}
 
@@ -71,9 +77,21 @@ export function ComparePage({ theme }: Props) {
             slug={runB}
             label="Run B"
             onData={setGraphB}
+            renderRequest={renderRequest}
+            onRenderReady={setReadyB}
           />
         )}
       </div>
+
+      <Button
+        type="button"
+        className="justify-self-start"
+        disabled={!runA || !runB || !readyA || !readyB}
+        onClick={() => setRenderRequest((current) => current + 1)}
+      >
+        <Play size={15} aria-hidden="true" />
+        Render
+      </Button>
 
       <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-inner">
         <PlotView
