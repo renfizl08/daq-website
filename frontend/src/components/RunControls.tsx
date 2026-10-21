@@ -76,7 +76,7 @@ export function RunControls({ slug, label, onData }: RunControlsProps) {
         return {
           ...trace,
           yaxis: column ? titles.traceAxisByColumn[column] : "y",
-          name: `${label} — ${titles.traceLabels[name] || name}`,
+          name: `${label} — ${traceLabel}`,
         };
       });
 
