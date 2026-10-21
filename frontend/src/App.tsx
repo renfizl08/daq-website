@@ -5,7 +5,10 @@ import { DatasetListPage } from "./pages/DatasetListPage";
 import { Badge, Button, Panel, Tooltip } from "./components/ui";
 import rfrDarkLogo from "./assets/rfr-dark-logo.png";
 import rfrLightLogo from "./assets/rfr-light-logo.png";
-import { ComparePage } from "./pages/ComparePage";
+
+const ComparePage = lazy(() =>
+  import("./pages/ComparePage").then((mod) => ({ default: mod.ComparePage })),
+);
 
 const DatasetPage = lazy(() =>
   import("./pages/DatasetPage").then((mod) => ({ default: mod.DatasetPage })),
